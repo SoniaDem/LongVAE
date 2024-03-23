@@ -8,15 +8,18 @@ from glob import glob
 import albumentations as a
 from torch.utils.data import DataLoader
 import torch
+import pandas as pd
+import os
 
 from VAE.models import VAE_IGLS
-from VAE.dataloader import LongDataSet
+from VAE.dataloader import LongDataset
 
 # ----------------------------------------- Load data ----------------------------------------------------
 
 # Retrieve list of image paths
 root_path = 'D:\\norm_subjects\\nuyl_4x4_down\\'
-paths = glob(root_path + '*')
+paths = glob(os.path.join(root_path, '*'))
+subject_key = pd.read_csv(os.path.join(os.getcwd(), 'subject_id_key.csv'))
 
 # Get cuda device
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -28,7 +31,8 @@ transforms = a.Compose([
     a.RandomRotate90(p=0.),
 ])
 
-loaded_data = LongDataSet(image_list=paths,
+loaded_data = LongDataset(image_list=paths,
+                          subject_key=subject_key,
                           transformations=transforms)
 
 batch_size = 50
@@ -44,7 +48,9 @@ test2 = test2.to(device)
 test3 = test3.to(device)
 
 
-model = VAE_IGLS(64)
+model = VAE_IGLS(64).to(device)
+
+
 
 
 

@@ -120,10 +120,11 @@ class BrainDataset3D(Dataset):
         return tensor_image
 
 
-class LongDataSet(Dataset):
-    def __init__(self, image_list, transformations):
+class LongDataset(Dataset):
+    def __init__(self, image_list, subject_key, transformations):
 
         self.image_list = image_list
+        self.subject_key = subject_key
         self.transformations = transformations
 
     def __len__(self):
@@ -139,7 +140,9 @@ class LongDataSet(Dataset):
         image_name = basename(self.image_list[idx])
         image_name = image_name.replace('_', '-').split('-')
         times = int(image_name[3][1:])
-        subject_id = image_name[1]
+
+        subject_id_adni = image_name[1]
+        subject_id_num = self.subject_key[self.subject_key["ADNI_ID"] == subject_id_adni]['NUM_ID'].item()
 
         transformed = self.transformations(image=image)
         # Retrieve the transformed image.
@@ -154,4 +157,4 @@ class LongDataSet(Dataset):
         tensor_image = tensor_image.unsqueeze(dim=0)
         tensor_image = tensor_image.transpose_(3, 1)
         tensor_image = tensor_image.type(torch.FloatTensor)
-        return tensor_image, subject_id, times
+        return tensor_image, subject_id_num, times

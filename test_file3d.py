@@ -1,8 +1,8 @@
 import glob
 import albumentations as a
-from vae import models, train
+from VAE import models, train
 import torch
-from vae.dataloader import brain_data_loader
+from VAE.dataloader import brain_data_loader
 
 
 root_path = 'D:\\Data\\ds000003_R2.0.2_raw\\ds000003_R2.0.2\\'

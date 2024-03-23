@@ -18,3 +18,20 @@ def print_prog(idx,
     :return:
     """
     print(f'[{idx + 1} / {len(iter_list)}]')
+
+
+def expand_vec(mat, vec):
+    """
+        As an example, there is a matrix of ones with size (3, 2, 2). We want to multiply
+        the vector [1, 2, 3] so we get:
+        [[[1  1],
+          [1  1]],
+
+         [[2  2],
+          [2  2]],
+
+         [[3  3],
+          [3  3]]]
+    """
+    extra_dims = (1,) * (mat.dim() - 1)
+    return vec.view(-1, *extra_dims)

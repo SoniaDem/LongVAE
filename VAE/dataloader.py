@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision.transforms import ToTensor
 import numpy as np
 import nibabel as nib
+from os.path import basename
 
 
 class BrainDataset2D(Dataset):
@@ -118,3 +119,39 @@ class BrainDataset3D(Dataset):
         tensor_image = tensor_image.type(torch.FloatTensor)
         return tensor_image
 
+
+class LongDataSet(Dataset):
+    def __init__(self, image_list, transformations):
+
+        self.image_list = image_list
+        self.transformations = transformations
+
+    def __len__(self):
+        return len(self.image_list)
+
+    def __getitem__(self, idx):
+        """
+        Here we are going to be iterating through each image,
+        transforming it and converting to a tensor.
+        """
+        # This produces a numpy array of shape (n_images, h, w)
+        image = nib.load(self.image_list[idx]).get_fdata()
+        image_name = basename(self.image_list[idx])
+        image_name = image_name.replace('_', '-').split('-')
+        times = int(image_name[3][1:])
+        subject_id = image_name[1]
+
+        transformed = self.transformations(image=image)
+        # Retrieve the transformed image.
+        trans_im = transformed['image']
+        # Subtract the mean.
+        norm = (trans_im - np.min(trans_im)) / (np.max(trans_im) - np.min(trans_im))
+        # I think i will also add blank region at the bottom of the image.
+        # filler = np.zeros((128, 128, 7))
+        # norm = np.concatenate((norm, filler), axis=2)
+        # Convert to tensor.
+        tensor_image = ToTensor()(norm)
+        tensor_image = tensor_image.unsqueeze(dim=0)
+        tensor_image = tensor_image.transpose_(3, 1)
+        tensor_image = tensor_image.type(torch.FloatTensor)
+        return tensor_image, subject_id, times

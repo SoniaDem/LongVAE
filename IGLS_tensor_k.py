@@ -149,7 +149,7 @@ while k <= iter:
     b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))  # size (k_dims, 2, 2)
     # b2 size (k_dims, 2, 1)
     b2 = bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), z_ijk.expand(1, -1, -1).transpose(2, 0))
-    betahat = bmm(b1, b2)  # size (k_dims, 2, 1)
+    betahat = bmm(b1, b2)
 
     sig_memory.append(sig_est.T.tolist())
 
@@ -182,4 +182,10 @@ for i in range(4):
 #
 # rmse = (sum(square_diffs) / len(square_diffs)) ** 0.5
 
+k = 0
+cov_mat = sigma_update[k]
+a = MultivariateNormal(loc=zeros(350), covariance_matrix=cov_mat).sample([1])
+
+aa = MultivariateNormal(loc=zeros(100, 350),
+                          covariance_matrix=sigma_update).sample([1])
 

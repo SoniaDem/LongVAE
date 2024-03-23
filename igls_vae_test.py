@@ -45,3 +45,6 @@ test3 = test3.to(device)
 
 
 model = VAE_IGLS(64)
+
+
+

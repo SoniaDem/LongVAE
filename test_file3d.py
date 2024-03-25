@@ -3,10 +3,14 @@ import albumentations as a
 from VAE import models, train
 import torch
 from VAE.dataloader import brain_data_loader
+import os
 
 
-root_path = 'D:\\Data\\ds000003_R2.0.2_raw\\ds000003_R2.0.2\\'
+root_path = 'F:\\ds000003_R2.0.2_raw\\ds000003_R2.0.2\\'
 paths = [file for file in glob.glob(root_path + '*\\*\\*.gz') if 'inplane' in file]
+
+# root_path = 'D:\\norm_subjects\\nuyl_4x4_down\\'
+# paths = glob(os.path.join(root_path, '*'))
 
 # test_file = nib.load(paths[0]).get_fdata()
 
@@ -29,9 +33,9 @@ print(f'Device = {device}')
 
 vae = models.VAE3d(256)
 vae = vae.to(device)
-# test_data = test_data.to(device)
-# #
-# out = vae(test_data)
+test_data = test_data.to(device)
+#
+out = vae(test_data)
 optimizer = torch.optim.Adam(vae.parameters(), lr=0.001)
 
 losses = train.train(1000,

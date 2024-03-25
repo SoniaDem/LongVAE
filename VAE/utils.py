@@ -9,6 +9,7 @@ def ask_dims(image):
 
     return dim0, dim1, dim2
 
+
 def print_prog(idx,
                iter_list):
     """
@@ -35,3 +36,33 @@ def expand_vec(mat, vec):
     """
     extra_dims = (1,) * (mat.dim() - 1)
     return vec.view(-1, *extra_dims)
+
+
+def get_args(path):
+    """
+    This method retrieves the arguments from a txt file to use.
+    (Stolen with permission from Joe's EdgeGraph code).
+
+    :param path: The path to the txt file.
+    :type path: str
+    :return params: A dictionary containing the parameters.
+    """
+
+    f = open(path, 'r')
+    lines = f.readlines()
+
+    # Remove new line token
+    lines = [line.strip('\n') for line in lines]
+
+    # Collect parameters in a dictionary.
+    params = {}
+    for line in lines:
+        line_split = line.split(" ")
+        # If there is a list specified, then we need to convert it from a long string to a list.
+        params[line_split[0]] = line_split[1] if len(line_split) == 2 else [l.strip(',') for l in line_split[1:]]
+
+    return params
+
+
+def list_to_str(the_list):
+    return ' '.join([str(l) for l in the_list])

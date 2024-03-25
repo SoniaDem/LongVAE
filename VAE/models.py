@@ -5,8 +5,12 @@ import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch import sigmoid, exp, randn_like, tensor, repeat_interleave, \
     normal, zeros, ones, eye, inverse, flatten, cat, bmm, mul, add
+from torch.nn.parameter import Parameter
 import torch
+
 from VAE.utils import expand_vec
+
+torch.manual_seed(340)
 
 
 class AE(Module):
@@ -162,7 +166,7 @@ class Encoder3d(Module):
 
 
 class Decoder3d(Module):
-    def __init__(self, z_dims):
+    def __init__(self, z_dims, flat_dim):
         super(Decoder3d, self).__init__()
         self.linear = Linear(z_dims, 32*4*7*7*3)
         self.unflatten = UnflattenManual3d()
@@ -176,17 +180,23 @@ class Decoder3d(Module):
         self.sigmoid = Sigmoid()
 
     def forward(self, x):
+        print(f'\nThis is the Decoder Johnson')
         x = self.linear(x)
-        # print(x.shape)
+        print('')
+        print(x.shape)
         x = self.unflatten(x)
-        # print(x.shape)
+        print(x.shape)
         x = self.batch1(self.conv1(x))
+        print(x.shape)
         x = F.leaky_relu(x)
         x = self.batch2(self.conv2(x))
+        print(x.shape)
         x = F.leaky_relu(x)
         x = self.batch3(self.conv3(x))
+        print(x.shape)
         x = F.leaky_relu(x)
         x = self.conv4(x)
+        print(x.shape)
         x = self.sigmoid(x)
         return x
 
@@ -225,61 +235,63 @@ class VAE3d(Module):
 class VAE_IGLS(Module):
     def __init__(self, z_dim):
         super(VAE_IGLS, self).__init__()
+        self.batch_size = None
+        self.device = None
         self.encoder = Encoder3d()
-        self.linear_mu = Linear(18816, z_dim)
-        self.linear_log_var = Linear(18816, z_dim)
-        self.decoder = Decoder3d(z_dims=z_dim)
-        self.igls_iterations = 10
+        self.linear_z_ijk = Linear(2560, z_dim)
+        self.decoder = Decoder3d_igls(z_dims=z_dim, flat_dim=2560)
+        self.igls_iterations = 1
         self.k_dims = z_dim
+        self.reset_sig_est = True
 
 
     def forward(self, x, subject_ids, times):
 
-        print('x.shape', x.shape)
-        print('subject_ids.shape', subject_ids.shape)
-        print('times.shape', times.shape)
+        # print('\nx.shape', x.shape)
+        # print('subject_ids.shape', subject_ids.shape)
+        # print('times.shape', times.shape)
 
+        self.device = x.device
         self.batch_size = x.shape[0]
-        z_ijk = self.encoder(x)
-        print('z_ijk.shape', z_ijk.shape)
+        encoded_x = self.encoder(x)
+        # print('\nencoded_x.shape', encoded_x.shape)
 
-        sigma_est, betahat = self.igls(z_ijk, subject_ids, times)
-        print('sigma_est.shape', sigma_est.shape)
+        z_ijk = self.linear_z_ijk(encoded_x)
+        # print('z_ijk.shape', z_ijk.shape)
 
-        z_hat = self.igls_reparameterise(sigma_est)
-        print('z_hat.shape', z_hat.shape)
+        cov_mat, betahat = self.igls_estimator(z_ijk, subject_ids, times)
+        # print('cov_mat', cov_mat.shape)
+        # print('betahat', betahat.shape)
+
+        mu = betahat[:, 0] + (betahat[:, 1] * times)
+        # print('mu.shape', mu.shape)
+
+        # z_hat = self.igls_reparameterise(mu, cov_mat).squeeze(0).T
+        z_hat = self.igls_reparameterise(mu, cov_mat).T.to(self.device)
+        # print('z_hat.shape', z_hat.shape)
 
         x = self.decoder(z_hat)
-        print('x.shape', x.shape)
+        # print('x.shape', x.shape)
 
-        return x, sigma_est, betahat
-
-        # # print(x.shape)
-        # mu = self.linear_mu(x)
-        # # print(mu.shape)
-        # log_var = self.linear_log_var(x)
-        # # print(log_var.shape)
-        # z = self.reparameterise(mu, log_var)
-        # # print(z.shape)
-        # x = self.decoder(z)
-        # return x, mu, log_var
-    #
-    # def reparameterise(self, mu, log_var):
-    #     std = exp(0.5 * log_var)
-    #     e = randn_like(std)
-    #     return mu + (std * e)
-
-    def igls_reparameterise(self, cov_mat):
-        return MultivariateNormal(loc=zeros(self.k_dims, self.batch_size),
-                                  covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+        return x, z_ijk, z_hat, cov_mat, betahat, mu
 
 
-    def igls(self, z_ijk, subject_ids, times):
+    @staticmethod
+    def igls_reparameterise(mean, cov_mat):
+        # return MultivariateNormal(loc=mean,
+        #                           covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+        mv_norm = torch.empty(mean.shape)
+        for i in range(mean.shape[0]):
+            mv_norm[i, :] = MultivariateNormal(loc=mean[i],
+                                               covariance_matrix=cov_mat[i]).sample([1])
+        return mv_norm
 
-        z1 = eye(self.batch_size)
-        z2 = zeros((self.batch_size, self.batch_size))
-        z3 = zeros((self.batch_size, self.batch_size))
-        z4 = zeros((self.batch_size, self.batch_size))
+    def igls_estimator(self, z_ijk, subject_ids, times):
+
+        z1 = eye(self.batch_size).to(self.device)
+        z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z3 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z4 = zeros((self.batch_size, self.batch_size)).to(self.device)
 
         for i in range(self.batch_size):
             for j in range(self.batch_size):
@@ -295,7 +307,7 @@ class VAE_IGLS(Module):
                     z3[i, j] = visit_i + visit_j
                     z4[i, j] = visit_i * visit_j
 
-        xx = ones((self.k_dims, self.batch_size, 2))  # size (k_dims, batch_size, 2)
+        xx = ones((self.k_dims, self.batch_size, 2)).to(self.device)  # size (k_dims, batch_size, 2)
         xx[:, :, 1] = times.repeat(self.k_dims, 1)  # size (k_dims, batch_size, 2)
         b1 = inverse(bmm(xx.transpose(2, 1), xx))  # following bmm, the size is (k_dims, 2, 2). This will do the
         # inverse of  each (2, 2) matrix.
@@ -313,7 +325,7 @@ class VAE_IGLS(Module):
         z3 = z3.repeat(self.k_dims, 1, 1)
         z4 = z4.repeat(self.k_dims, 1, 1)
 
-        sig_est = zeros(4, self.k_dims)
+        sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
         for _ in range(self.igls_iterations):
             zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
             ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
@@ -324,6 +336,11 @@ class VAE_IGLS(Module):
             # size (4, k_dims)
             sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
 
+            # HERE WE FORCED SMALL NEGATIVE VALUES to be zero because we need the
+            # covariance matrix to be positive definite.
+            if self.reset_sig_est:
+                sig_est[torch.where(sig_est <= 0)] = 1e-6
+
             # size (k_dims, 1, 1)
             s_e = expand_vec(z1, sig_est[0])
             s_a0 = expand_vec(z2, sig_est[1])
@@ -332,7 +349,12 @@ class VAE_IGLS(Module):
 
             # size (k_dims, batch_size, batch_size)
             sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            # if sigma_update.min() <= 0:
+            #     print(sigma_update)
 
+            # L = torch.linalg.cholesky(sigma_update)
+            # print(L)
+            # print(L @ L.mT)
             # size (k_dims, 2, 2)
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
             # b2 size (k_dims, 2, 1)
@@ -340,4 +362,45 @@ class VAE_IGLS(Module):
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
 
-        return sig_est, betahat
+        return sigma_update, betahat
+
+
+class Decoder3d_igls(Module):
+    def __init__(self, z_dims, flat_dim):
+        super(Decoder3d_igls, self).__init__()
+        self.linear = Linear(z_dims, flat_dim)
+        # self.unflatten = ()
+        self.conv1 = ConvTranspose3d(32, 16, kernel_size=3, stride=1, padding=0)
+        self.batch1 = BatchNorm3d(16)
+        self.conv2 = ConvTranspose3d(16, 16, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.batch2 = BatchNorm3d(16)
+        self.conv3 = ConvTranspose3d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.batch3 = BatchNorm3d(8)
+        self.conv4 = ConvTranspose3d(8, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.sigmoid = Sigmoid()
+
+    def forward(self, x):
+        # print(f'\nThis is the Decoder Johnson')
+        x = self.linear(x)
+        # print('')
+        # print(x.shape)
+        x = self.UnflattenManual3d_igls(x)
+        # print(x.shape)
+        x = self.batch1(self.conv1(x))
+        # print(x.shape)
+        x = F.leaky_relu(x)
+        x = self.batch2(self.conv2(x))
+        # print(x.shape)
+        x = F.leaky_relu(x)
+        x = self.batch3(self.conv3(x))
+        # print(x.shape)
+        x = F.leaky_relu(x)
+        x = self.conv4(x)
+        # print(x.shape)
+        x = self.sigmoid(x)
+        return x
+
+    @staticmethod
+    def UnflattenManual3d_igls(x):
+        return x.view(x.size(0), 32, 5, 4, 4)
+

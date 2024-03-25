@@ -126,7 +126,7 @@ def expand_vec(mat, vec):
 
 sig_memory = []
 
-iter = 100
+iter = 10
 k = 1
 
 while k <= iter:
@@ -186,6 +186,8 @@ k = 0
 cov_mat = sigma_update[k]
 a = MultivariateNormal(loc=zeros(350), covariance_matrix=cov_mat).sample([1])
 
-aa = MultivariateNormal(loc=zeros(100, 350),
+# sigma update (100, 350, 350)
+mean = zeros((100, 350))
+aa = MultivariateNormal(loc=mean,
                           covariance_matrix=sigma_update).sample([1])
 

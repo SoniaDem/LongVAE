@@ -139,7 +139,10 @@ class LongDataset(Dataset):
         image = nib.load(self.image_list[idx]).get_fdata()
         image_name = basename(self.image_list[idx])
         image_name = image_name.replace('_', '-').split('-')
-        times = int(image_name[3][1:])
+
+        time_list = [0, 6, 12, 18, 24, 30, 36]
+        time = int(image_name[3][1:])
+        times = time_list.index(time) + 1
 
         subject_id_adni = image_name[1]
         subject_id_num = self.subject_key[self.subject_key["ADNI_ID"] == subject_id_adni]['NUM_ID'].item()
@@ -150,10 +153,10 @@ class LongDataset(Dataset):
         # Subtract the mean.
         norm = (trans_im - np.min(trans_im)) / (np.max(trans_im) - np.min(trans_im))
         # I think i will also add blank region at the bottom of the image.
-        # filler = np.zeros((128, 128, 7))
-        # norm = np.concatenate((norm, filler), axis=2)
+        filler = np.zeros((48, 56, 48))
+        filler[2:45, 2:55, 1:47] = norm
         # Convert to tensor.
-        tensor_image = ToTensor()(norm)
+        tensor_image = ToTensor()(filler)
         tensor_image = tensor_image.unsqueeze(dim=0)
         tensor_image = tensor_image.transpose_(3, 1)
         tensor_image = tensor_image.type(torch.FloatTensor)

@@ -65,4 +65,4 @@ def get_args(path):
 
 
 def list_to_str(the_list):
-    return ' '.join([str(l) for l in the_list])
+    return ' '.join(map(str, the_list))

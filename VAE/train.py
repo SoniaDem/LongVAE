@@ -96,10 +96,9 @@ def loss_fn(target,
             beta=5):
 
     # reproduction_loss = F.binary_cross_entropy(target, output, reduction='sum')
-    reproduction_loss = F.mse_loss(target, output, reduction='sum')
+    reproduction_loss = F.mse_loss(target, output, reduction='mean')
     bce = torch.sum(0.5 * reproduction_loss)
-    kld = 0.5 * torch.sum(1 + log_var - (mean ** 2) - torch.exp(log_var))
-    # kld = -0.5 * torch.sum(1 + log_var - (mean ** 2) - torch.exp(log_var)) # I dont think there should be a '-'
+    kld = -0.5 * torch.sum(1 + log_var - (mean ** 2) - torch.exp(log_var))
     kld /= torch.numel(mean.data)
     loss = (beta * torch.sum(kld)) + torch.sum(bce)
     return loss

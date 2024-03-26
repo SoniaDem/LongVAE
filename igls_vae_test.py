@@ -6,6 +6,7 @@
 # ----------------------------------------- Load Packages ----------------------------------------------------
 from glob import glob
 import albumentations as a
+import numpy as np
 from torch.utils.data import DataLoader
 import torch
 import pandas as pd
@@ -14,7 +15,7 @@ import os
 
 from VAE.models import VAE_IGLS
 from VAE.dataloader import LongDataset
-from VAE.train import lvae_loss
+from VAE.train import lvae_loss, loss_fn
 from VAE.utils import get_args, list_to_str
 
 # ----------------------------------------- Load parameters ----------------------------------------------------
@@ -33,7 +34,7 @@ if not os.path.isdir(project_dir):
 project_files = os.listdir(project_dir)
 h_flip = 0. if "H_FLIP" not in params.keys() else float(params["H_FLIP"])
 v_flip = 0. if "V_FLIP" not in params.keys() else float(params["V_FLIP"])
-h_flip = 0. if "RAND_ROTATE" not in params.keys() else float(params["RAND_ROTATE"])
+rand_rot = 0. if "RAND_ROTATE" not in params.keys() else float(params["RAND_ROTATE"])
 batch_size = int(params["BATCH_SIZE"])
 shuffle_batches = True if params['SHUFFLE_BATCHES'].lower() == 'true' else False
 epochs = int(params["EPOCHS"])
@@ -41,6 +42,7 @@ save_epochs = int(params["SAVE_EPOCHS"])
 recon_loss = True if params["RECON_LOSS"].lower() == 'true' else False
 kl_loss = True if params["KL_LOSS"].lower() == 'true' else False
 align_loss = True if params["ALIGN_LOSS"].lower() == 'true' else False
+beta = 1 if "BETA" not in params["BETA"] else float(params["BETA"])
 gamma = 1 if "GAMMA" not in params["GAMMA"] else float(params["GAMMA"])
 lr = float(params["LR"]) if "LR" in params.keys() else 1e-4
 momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9
@@ -59,9 +61,9 @@ print(f'Device = {device}')
 
 
 transforms = a.Compose([
-    a.HorizontalFlip(p=0.),
-    a.VerticalFlip(p=0.),
-    a.RandomRotate90(p=0.),
+    a.HorizontalFlip(p=h_flip),
+    a.VerticalFlip(p=v_flip),
+    a.RandomRotate90(p=rand_rot),
 ])
 
 loaded_data = LongDataset(image_list=paths,
@@ -95,18 +97,20 @@ model = VAE_IGLS(int(params["Z_DIM"]))
 
 # Here, get the latest model along with the number of epochs or create a new model if one doesn't exist.
 model_dir = os.path.join(project_dir, 'Models')
-if os.path.isdir(model_dir):
+if os.path.isdir(model_dir) and len(os.listdir(model_dir)) > 0:
     model_list = os.listdir(model_dir)
     model_names = ['_'.join(m.split('_')[:-1]) for m in model_list]
     model_epochs = [int(m.split('_')[-1].replace('.h5', '')) for m in model_list]
     pre_epochs = max(model_epochs)
-    model_name = model_names[model_epochs.index(pre_epochs)]
+    model_name = model_list[model_epochs.index(pre_epochs)]
     try:
-        model.load_state_dict(torch.load(model_name))
+        model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
         print('Matched model keys successfully.')
     except NameError:
         print(f'Model matching unsuccessful: \n\t"{model_name}"')
 
+elif os.path.isdir(model_dir) and len(os.listdir(model_dir)) == 0:
+    pre_epochs = 0
 else:
     os.mkdir(model_dir)
     pre_epochs = 0
@@ -119,40 +123,87 @@ optimizer = torch.optim.SGD(list(model.parameters()),
                             lr=lr,
                             momentum=momentum)
 
-
 # ----------------------------------------- Train Model ----------------------------------------------------
 
 losses = []
 for epoch in range(pre_epochs, pre_epochs + epochs):
-    print(f'Epoch [{epoch + 1} / {epochs}]')
+    print(f'Epoch [{epoch + 1} / {pre_epochs + epochs}]')
 
     epoch_losses = []
     for batch_no, batch in enumerate(dataloader):
-        print(f'\tBatch [{batch_no+1} / {len(dataloader)}]')
+
+        print(f'\tBatch [{batch_no + 1} / {len(dataloader)}]')
 
         imgs = batch[0].to(device)
         subj_ids = batch[1].to(device)
         times = batch[2].to(device)
+        # print('Attached to devices')
 
-        pred, z_prior, z_post, cov_mat, beta, mean = model(imgs, subj_ids, times)
+        optimizer.zero_grad()
+        # print('Zerod optimizer')
+        # pred, z_prior, z_post, cov_mat, beta, mean = model(imgs, subj_ids, times)
+        pred, mu, log_var = model(imgs, subj_ids, times)
+        # print('Passed through model')
 
-        loss, each_loss = lvae_loss(target=imgs,
-                                    output=pred,
-                                    prior_z=z_prior,
-                                    post_z=z_post,
-                                    mean=mean,
-                                    cov_mat=cov_mat,
-                                    bse=recon_loss,
-                                    kl=kl_loss,
-                                    align=align_loss,
-                                    beta=beta,
-                                    gamma=gamma
-                                    )
+        loss = loss_fn(imgs,
+                       pred,
+                       mu,
+                       log_var,
+                       beta=1)
 
-        epoch_losses.append(each_loss)
+        # loss, each_loss = lvae_loss(target=imgs,
+        #                             output=pred,
+        #                             prior_z=z_prior,
+        #                             post_z=z_post,
+        #                             mean=mean,
+        #                             cov_mat=cov_mat,
+        #                             bse=recon_loss,
+        #                             kl=kl_loss,
+        #                             align=align_loss,
+        #                             beta=beta,
+        #                             gamma=gamma
+        #                             )
+        # print('got loss value', each_loss)
+        loss.backward(retain_graph=True)
+        # print('done loss.backward()')
+        optimizer.step()
+        # print('stepped optimizer')
+        epoch_losses.append([loss.item(), 0, 0, 0])
+        # epoch_losses.append(each_loss)
 
-    if epoch%save_epochs == 0:
+    epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
+    losses.append(epoch_losses)
+
+    # Save the model and the losses to the file if the correct epoch
+    if (epoch+1) % save_epochs == 0:
         torch.save(model.state_dict(), os.path.join(model_dir, f'{name}_{epoch}.h5'))
+        print(f'Saved {name}_{epoch}.h5')
+
+        loss_file = open(os.path.join(project_dir, loss_filename), 'a+')
+        for loss_line in losses[-save_epochs:]:
+            loss_line = list_to_str(loss_line) + '\n'
+            loss_file.write(loss_line)
+        loss_file.close()
+        print('Saved losses')
+
+    print(f'\n\tLoss: {losses[-1][0]:.6f}')
+    print(f'\tRecon {losses[-1][1]:.6f}')
+    print(f'\tKL {losses[-1][2]:.6f}')
+    print(f'\tAlign {losses[-1][3]:.6f}\n')
+
+    optimizer.zero_grad(set_to_none=True)
+    model.zero_grad(set_to_none=True)
+    torch.cuda.empty_cache()
+
+
+print('Done')
+
+
+from VAE.plotting import plot_loss
+
+losses_txt = [l.strip('\n') for l in open(os.path.join(project_dir, loss_filename), 'r')]
+losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
+plot_loss(losses_txt[10:])
 
 
 
@@ -161,19 +212,18 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
 
 
-
-# .to(device)
 
 # test_imgs, test_ids, test_times = next(iter(dataloader))
 #
 # test_imgs = test_imgs.to(device)
 # test_ids = test_ids.to(device)
 # test_times = test_times.to(device)
-
-model = VAE_IGLS(64).to(device)
-
-# out, sig, beta, mu = model(test_imgs, test_ids, test_times)
-
+#
+# model = VAE_IGLS(64).to(device)
+#
+# # out, sig, beta, mu = model(test_imgs, test_ids, test_times)
+#
+# x = model(test_imgs, test_ids, test_times)
 
 
 

@@ -3,6 +3,7 @@ from torch.nn import Conv2d, MaxPool2d, Linear, ConvTranspose2d, \
     BatchNorm3d, ConvTranspose3d
 import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.distributions.normal import Normal
 from torch import sigmoid, exp, randn_like, tensor, repeat_interleave, \
     normal, zeros, ones, eye, inverse, flatten, cat, bmm, mul, add
 from torch.nn.parameter import Parameter
@@ -243,6 +244,9 @@ class VAE_IGLS(Module):
         self.igls_iterations = 1
         self.k_dims = z_dim
         self.reset_sig_est = True
+        self.lvae = False
+        self.linear_log_var = Linear(2560, z_dim)
+        self.linear_mu = Linear(2560, z_dim)
 
 
     def forward(self, x, subject_ids, times):
@@ -256,35 +260,62 @@ class VAE_IGLS(Module):
         encoded_x = self.encoder(x)
         # print('\nencoded_x.shape', encoded_x.shape)
 
-        z_ijk = self.linear_z_ijk(encoded_x)
-        # print('z_ijk.shape', z_ijk.shape)
+        if self.lvae:
+            z_ijk = self.linear_z_ijk(encoded_x)
+            # print('z_ijk.shape', z_ijk.shape)
+            cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+            # print('cov_mat', cov_mat.shape)
+            # print('betahat', betahat.shape)
+            print('sig_randeffs', sig_randeffs.shape)
+            print('sig_errs', sig_errs.shape)
 
-        cov_mat, betahat = self.igls_estimator(z_ijk, subject_ids, times)
-        # print('cov_mat', cov_mat.shape)
-        # print('betahat', betahat.shape)
+            mu = betahat[:, 0] + (betahat[:, 1] * times)
+            # print('mu.shape', mu.shape)
 
-        mu = betahat[:, 0] + (betahat[:, 1] * times)
-        # print('mu.shape', mu.shape)
+            # z_hat = self.igls_reparameterise(mu, cov_mat).squeeze(0).T
+            z_hat = self.igls_reparameterise(mu, cov_mat).T
+            # print('z_hat.shape', z_hat.shape)
+            # z_hat = self.igls_reparameterise(mu, sig_randeffs, sig_errs, times)
+            # print('z_hat.shape', z_hat.shape)
 
-        # z_hat = self.igls_reparameterise(mu, cov_mat).squeeze(0).T
-        z_hat = self.igls_reparameterise(mu, cov_mat).T.to(self.device)
-        # print('z_hat.shape', z_hat.shape)
+            x = self.decoder(z_hat)
+            # print('x.shape', x.shape)
+            return x, z_ijk, z_hat, cov_mat, betahat, mu
 
-        x = self.decoder(z_hat)
-        # print('x.shape', x.shape)
+        else:
+            mu = self.linear_mu(encoded_x)
+            log_var = self.linear_log_var(encoded_x)
+            z = self.reparameterise(mu, log_var)
+            x = self.decoder(z)
+            return x, mu, log_var
 
-        return x, z_ijk, z_hat, cov_mat, betahat, mu
+
+    def reparameterise(self, mu, log_var):
+        std = exp(0.5 * log_var)
+        e = randn_like(std)
+        return mu + (std * e)
 
 
     @staticmethod
     def igls_reparameterise(mean, cov_mat):
-        # return MultivariateNormal(loc=mean,
-        #                           covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
-        mv_norm = torch.empty(mean.shape)
-        for i in range(mean.shape[0]):
-            mv_norm[i, :] = MultivariateNormal(loc=mean[i],
-                                               covariance_matrix=cov_mat[i]).sample([1])
-        return mv_norm
+        return MultivariateNormal(loc=mean,
+                                  covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+        # mv_norm = torch.empty(mean.shape).to(self.device)
+        # for i in range(mean.shape[0]):
+        #     mv_norm[i, :] = MultivariateNormal(loc=mean[i],
+        #                                        covariance_matrix=cov_mat[i]).sample([1])
+        # return mv_norm
+
+    # def igls_reparameterise(self, mean, sig_rand_effs, sig_errs, times):
+    #
+    #     a0_a1 = torch.empty((self.k_dims, 2, 2)).to(self.device)
+    #     for i in range(self.k_dims):
+    #         a0_a1[i, :, :] = MultivariateNormal(zeros(2), sig_rand_effs[i]).sample([1])
+    #
+    #     # a0_a1 = MultivariateNormal(zeros(2), sig_rand_effs).sample([1])
+    #     e = Normal(zeros(1), sig_errs).sample([1])
+    #     z_hat = mean + a0_a1[:, :, 0] + (a0_a1[:, :, 1] * times) + e
+    #     return z_hat
 
     def igls_estimator(self, z_ijk, subject_ids, times):
 
@@ -362,7 +393,15 @@ class VAE_IGLS(Module):
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
 
-        return sigma_update, betahat
+        sig_rand_eff = torch.empty(self.k_dims, 2, 2)
+        sig_errs = sig_est[0]
+        for k in range(self.k_dims):
+            s_a0 = sig_est[1][k]
+            s_a01 = sig_est[2][k]
+            s_a1 = sig_est[3][k]
+            sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
+
+        return sigma_update, betahat, sig_rand_eff, sig_errs
 
 
 class Decoder3d_igls(Module):

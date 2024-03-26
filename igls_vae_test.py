@@ -141,28 +141,23 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
         optimizer.zero_grad()
         # print('Zerod optimizer')
-        # pred, z_prior, z_post, cov_mat, beta, mean = model(imgs, subj_ids, times)
-        pred, mu, log_var = model(imgs, subj_ids, times)
+        pred, z_prior, z_post, cov_mat, betahat, mean = model(imgs, subj_ids, times)
         # print('Passed through model')
 
-        loss = loss_fn(imgs,
-                       pred,
-                       mu,
-                       log_var,
-                       beta=1)
 
-        # loss, each_loss = lvae_loss(target=imgs,
-        #                             output=pred,
-        #                             prior_z=z_prior,
-        #                             post_z=z_post,
-        #                             mean=mean,
-        #                             cov_mat=cov_mat,
-        #                             bse=recon_loss,
-        #                             kl=kl_loss,
-        #                             align=align_loss,
-        #                             beta=beta,
-        #                             gamma=gamma
-        #                             )
+        loss, each_loss = lvae_loss(target=imgs,
+                                    output=pred,
+                                    prior_z=z_prior,
+                                    post_z=z_post,
+                                    mean=mean,
+                                    cov_mat=cov_mat,
+                                    bse=recon_loss,
+                                    kl=kl_loss,
+                                    align=align_loss,
+                                    beta=beta,
+                                    gamma=gamma
+                                    )
+
         # print('got loss value', each_loss)
         loss.backward(retain_graph=True)
         # print('done loss.backward()')
@@ -176,7 +171,7 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
     # Save the model and the losses to the file if the correct epoch
     if (epoch+1) % save_epochs == 0:
-        torch.save(model.state_dict(), os.path.join(model_dir, f'{name}_{epoch}.h5'))
+        torch.save(model.state_dict(), os.path.join(model_dir, f'{name}_{epoch+1}.h5'))
         print(f'Saved {name}_{epoch}.h5')
 
         loss_file = open(os.path.join(project_dir, loss_filename), 'a+')

@@ -287,7 +287,7 @@ class VAE_IGLS(Module):
             log_var = self.linear_log_var(encoded_x)
             z = self.reparameterise(mu, log_var)
             x = self.decoder(z)
-            return x, mu, log_var
+            return x, None, None, log_var, None, mu
 
 
     def reparameterise(self, mu, log_var):

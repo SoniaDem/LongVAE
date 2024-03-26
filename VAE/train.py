@@ -144,16 +144,17 @@ def lvae_loss(target,
     total_loss = 0
     losses = [0] * 4
     if bse:
-        reproduction_loss = F.mse_loss(target, output, reduction='sum')
+        reproduction_loss = F.mse_loss(target, output, reduction='mean')
         bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
         total_loss += bce_loss
         losses[1] = bce_loss.item()
 
     if kl:
-        # kl_loss = 0.5 * ()
-        # total_loss += (beta * kl_loss)
-        # losses[2] = (beta * kl_loss.item())
-        raise Exception('Not implemented')
+        kl_loss = -0.5 * torch.sum(1 + cov_mat - (mean ** 2) - torch.exp(cov_mat))
+        kl_loss /= torch.numel(mean.data)
+        total_loss += (beta * kl_loss)
+        losses[2] = (beta * kl_loss.item())
+        # raise Exception('Not implemented')
 
     if align:
         # align_loss = 0

@@ -108,10 +108,9 @@ def lvae_loss(target,
               output,
               prior_z,
               post_z,
-              mu1,
-              cov_mat1,
-              mu2,
-              cov_mat2,
+              mu,
+              cov_mat,
+              igls_vars=None,
               beta=1,
               gamma=1,
               bse=True,
@@ -133,10 +132,9 @@ def lvae_loss(target,
     :param prior_z: z_ijk which is output from the encoder and the linear layer.
     :param post_z: z_hat which is following the IGLS estimation method and sampling of
         the multivariate normal distribution.
-    :param cov_mat1: The covariance of z_ijk.
-    :param mu1: The mean of z_ijk.
-    :param cov_mat2: The covariance matrices from each of the IGLS models of z_ijk.
-    :param mu2: The mean values for each IGLS models of z_ijk.
+    :param cov_mat: The covariance of z_ijk.
+    :param mu: The mean of z_ijk.
+    :param igls_vars: a matrix of ([mu_a0, sig_a0, mu_a1, sig_a1, mu_e, sig_e], k_dims)
     :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
     :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
     :param bse: If True then implement the reproduction loss.
@@ -154,13 +152,17 @@ def lvae_loss(target,
         losses[1] = bce_loss.item()
 
     if kl:
+        a0_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[1]) - (igls_vars[0] ** 2) - igls_vars[1])
+        a0_kl /= torch.numel(igls_vars[0])
+        a1_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[3]) - (igls_vars[2] ** 2) - igls_vars[3])
+        a1_kl /= torch.numel(igls_vars[2])
+        e_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[5]) - (igls_vars[4] ** 2) - igls_vars[5])
+        e_kl /= torch.numel(igls_vars[4])
+        kl_loss = (a0_kl + a1_kl + e_kl) / 3
 
-        kl_loss = 0
-        kl_loss = -0.5 * torch.sum(1 + cov_mat - (mean ** 2) - torch.exp(cov_mat))
-        kl_loss /= torch.numel(mean.data)
         total_loss += (beta * kl_loss)
         losses[2] = (beta * kl_loss.item())
-        raise Exception('Not implemented')
+        # raise Exception('Not implemented')
 
     if align:
         align_loss = F.mse_loss(prior_z, post_z, reduction='mean')

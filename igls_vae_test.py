@@ -150,7 +150,7 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
         optimizer.zero_grad()
         print('Zerod optimizer')
-        pred, z_prior, z_post, cov_mat1, mu1, cov_mat2, mu2, betahat = model(imgs, subj_ids, times)
+        pred, z_prior, z_post, cov_mat, mu, betahat, igls_vars = model(imgs, subj_ids, times)
         print('Passed through model')
 
 
@@ -158,10 +158,9 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
                                     output=pred,
                                     prior_z=z_prior,
                                     post_z=z_post,
-                                    mu1=mu1,
-                                    cov_mat1=cov_mat1,
-                                    mu2=mu2,
-                                    cov_mat2=cov_mat2,
+                                    mu=mu,
+                                    cov_mat=cov_mat,
+                                    igls_vars=igls_vars,
                                     bse=recon_loss,
                                     kl=kl_loss,
                                     align=align_loss,
@@ -224,10 +223,22 @@ plot_loss(losses_txt[10:])
 #
 # x = model(test_imgs, test_ids, test_times)
 
-
-
-
-
-
-
-
+#
+#
+# from torch import tensor, zeros
+# from torch.distributions.normal import Normal
+#
+# s_a0 = tensor([1.0000e-06, 1.0000e-06, 3.0826e-01, 1.2234e-01, 1.0000e-06, 1.0000e-06,
+#                5.7495e-02, 1.0000e-06, 1.9340e-01, 5.3452e-02, 1.4071e-01, 1.0000e-06,
+#                1.0000e-06, 9.9936e-02, 7.2411e-02, 6.8768e-02, 2.7696e-02, 6.0275e-02,
+#                2.0357e-03, 3.9366e-02, 1.0974e-01, 4.0478e-02, 1.0270e-01, 1.0191e-01,
+#                2.8810e-03, 1.0000e-06, 1.0000e-06, 1.0000e-06, 1.0000e-06, 1.0000e-06,
+#                2.5366e-01, 2.9570e-03, 5.9013e-02, 1.5969e-01, 5.3727e-02, 2.6780e-02,
+#                1.3791e-01, 1.0000e-06, 1.0000e-06, 5.6404e-02, 1.2999e-01, 8.0231e-02,
+#                6.8059e-02, 1.0000e-06, 5.3010e-02, 1.2680e-02, 1.3311e-01, 1.0000e-06,
+#                1.0426e-02, 1.0000e-06, 2.9582e-02, 1.3844e-01, 8.7853e-02, 1.0000e-06,
+#                1.0000e-06, 5.6054e-02, 1.0000e-06, 1.0000e-06, 1.0000e-06, 4.3480e-02,
+#                1.0000e-06, 1.0000e-06, 1.0805e-01, 1.0000e-06])
+#
+# # a0 = Normal(zeros(s_a0.shape[0]), s_a0).sample([50]).T
+# t = torch.cat([s_a0.expand(1, -1), s_a0.expand(1, -1), s_a0.expand(1,-1)], 0)

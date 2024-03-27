@@ -168,7 +168,7 @@ def lvae_loss(target,
         align_loss = F.mse_loss(prior_z, post_z, reduction='mean')
         total_loss += (gamma * align_loss)
         losses[3] = (gamma * align_loss.item())
-        raise Exception('Not implemented')
+        # raise Exception('Not implemented')
 
     losses[0] = total_loss.item()
 

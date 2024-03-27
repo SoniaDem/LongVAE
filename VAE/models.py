@@ -281,11 +281,8 @@ class VAE_IGLS(Module):
             # print('a1.shape', a1.shape)
             # print('e.shape', e.shape)
 
-            igls_vars = torch.cat([a0.mean(axis=0).expand(1, -1),
-                                   sig_randeffs[:, 0, 0].expand(1, -1),
-                                   a1.mean(axis=0).expand(1, -1),
+            igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
                                    sig_randeffs[:, 1, 1].expand(1, -1),
-                                   e.mean(axis=0).expand(1, -1),
                                    sig_errs.expand(1, -1)], axis=0)
             # print('igls_vars', igls_vars.shape)
 
@@ -333,6 +330,8 @@ class VAE_IGLS(Module):
         vz3 = flatten(z3.transpose(1, 0)).expand(1, -1).T
         vz4 = flatten(z4.transpose(1, 0)).expand(1, -1).T
         zz = cat((vz1, vz2, vz3, vz4), axis=1)  # size (batch_size^2, 4)
+        # print('igls zz', zz.shape)
+        # print('zz', zz)
 
         z1 = z1.repeat(self.k_dims, 1, 1)  # size (k_dims, batch_size, batch_size)
         z2 = z2.repeat(self.k_dims, 1, 1)
@@ -346,9 +345,11 @@ class VAE_IGLS(Module):
             ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
             ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
             ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
+            print('igls ztz', ztz.shape)
 
             # size (4, k_dims)
             sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
+            print('igls sig est', sig_est.shape)
 
             # HERE WE FORCED SMALL NEGATIVE VALUES to be zero because we need the
             # covariance matrix to be positive definite.
@@ -360,9 +361,11 @@ class VAE_IGLS(Module):
             s_a0 = expand_vec(z2, sig_est[1])
             s_a01 = expand_vec(z3, sig_est[2])
             s_a1 = expand_vec(z4, sig_est[3])
+            print('igls idk')
 
             # size (k_dims, batch_size, batch_size)
             sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            print('igls sigma_update', sigma_update.shape)
             # if sigma_update.min() <= 0:
             #     print(sigma_update)
 
@@ -370,17 +373,25 @@ class VAE_IGLS(Module):
             # print(L)
             # print(L @ L.mT)
             # size (k_dims, 2, 2)
+            inv_sig_up = inverse(sigma_update)
+            print('inv sig up', inv_sig_up.shape)
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
+            print('b1', b1.shape)
             # b2 size (k_dims, 2, 1)
             b2 = bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            print('b2', b2.shape)
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
+            print('betahat', betahat.shape)
+            # print('igls betahat', betahat.shape)
 
         if self.delta is not None:
             # Add a small value to the diagonal to solve the multivariate sampling issue.
             diag_ones = eye(sigma_update.shape[1]).repeat(self.k_dims, 1, 1).to(self.device)
             sigma_update += sigma_update + (self.delta * diag_ones)
 
+        # print('igls betahat', betahat.shape)
+        # print('igls sigma_update', sigma_update.shape)
         sig_rand_eff = torch.empty(self.k_dims, 2, 2).to(self.device)
         sig_errs = sig_est[0].to(self.device)
         for k in range(self.k_dims):
@@ -388,6 +399,10 @@ class VAE_IGLS(Module):
             s_a01 = sig_est[2][k]
             s_a1 = sig_est[3][k]
             sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
+
+        # print('igls sig_rand_eff', sig_rand_eff.shape)
+        # print('igls sig_e', sig_errs.shape)
+
 
         return sigma_update, betahat, sig_rand_eff, sig_errs
 

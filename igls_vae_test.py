@@ -130,8 +130,6 @@ optimizer = torch.optim.SGD(list(model.parameters()),
 if delta is not None:
     model.delta = delta
 
-model.delta = 1e-1
-
 # ----------------------------------------- Train Model ----------------------------------------------------
 
 losses = []
@@ -146,12 +144,13 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         imgs = batch[0].to(device)
         subj_ids = batch[1].to(device)
         times = batch[2].to(device)
+        print(f'No. unique patients {subj_ids.unique().shape}')
         # print('Attached to devices')
 
         optimizer.zero_grad()
-        print('Zerod optimizer')
+        # print('Zerod optimizer')
         pred, z_prior, z_post, cov_mat, mu, betahat, igls_vars = model(imgs, subj_ids, times)
-        print('Passed through model')
+        # print('Passed through model')
 
 
         loss, each_loss = lvae_loss(target=imgs,
@@ -168,14 +167,16 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
                                     gamma=gamma
                                     )
 
-        print('got loss value', each_loss)
+        # print('got loss value', each_loss)
         loss.backward(retain_graph=True)
-        print('done loss.backward()')
+        # print('done loss.backward()')
         optimizer.step()
-        print('stepped optimizer')
+        # print('stepped optimizer')
         epoch_losses.append(each_loss)
 
+    print(epoch_losses)
     epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
+    print(epoch_losses)
     losses.append(epoch_losses)
 
     # Save the model and the losses to the file if the correct epoch
@@ -209,9 +210,11 @@ losses_txt = [l.strip('\n') for l in open(os.path.join(project_dir, loss_filenam
 losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
 plot_loss(losses_txt[10:])
 
+plot_loss(np.asarray(losses)[:, 0])
 
 
-# test_imgs, test_ids, test_times = next(iter(dataloader))
+
+test_imgs, test_ids, test_times = next(iter(dataloader))
 #
 # test_imgs = test_imgs.to(device)
 # test_ids = test_ids.to(device)
@@ -224,21 +227,32 @@ plot_loss(losses_txt[10:])
 # x = model(test_imgs, test_ids, test_times)
 
 #
+# #
+# from torch import eye, zeros, flatten, cat
 #
-# from torch import tensor, zeros
-# from torch.distributions.normal import Normal
+# z1 = eye(batch_size).to(device)
+# z2 = zeros((batch_size, batch_size)).to(device)
+# z3 = zeros((batch_size, batch_size)).to(device)
+# z4 = zeros((batch_size, batch_size)).to(device)
 #
-# s_a0 = tensor([1.0000e-06, 1.0000e-06, 3.0826e-01, 1.2234e-01, 1.0000e-06, 1.0000e-06,
-#                5.7495e-02, 1.0000e-06, 1.9340e-01, 5.3452e-02, 1.4071e-01, 1.0000e-06,
-#                1.0000e-06, 9.9936e-02, 7.2411e-02, 6.8768e-02, 2.7696e-02, 6.0275e-02,
-#                2.0357e-03, 3.9366e-02, 1.0974e-01, 4.0478e-02, 1.0270e-01, 1.0191e-01,
-#                2.8810e-03, 1.0000e-06, 1.0000e-06, 1.0000e-06, 1.0000e-06, 1.0000e-06,
-#                2.5366e-01, 2.9570e-03, 5.9013e-02, 1.5969e-01, 5.3727e-02, 2.6780e-02,
-#                1.3791e-01, 1.0000e-06, 1.0000e-06, 5.6404e-02, 1.2999e-01, 8.0231e-02,
-#                6.8059e-02, 1.0000e-06, 5.3010e-02, 1.2680e-02, 1.3311e-01, 1.0000e-06,
-#                1.0426e-02, 1.0000e-06, 2.9582e-02, 1.3844e-01, 8.7853e-02, 1.0000e-06,
-#                1.0000e-06, 5.6054e-02, 1.0000e-06, 1.0000e-06, 1.0000e-06, 4.3480e-02,
-#                1.0000e-06, 1.0000e-06, 1.0805e-01, 1.0000e-06])
+# for i in range(batch_size):
+#     for j in range(batch_size):
 #
-# # a0 = Normal(zeros(s_a0.shape[0]), s_a0).sample([50]).T
-# t = torch.cat([s_a0.expand(1, -1), s_a0.expand(1, -1), s_a0.expand(1,-1)], 0)
+#         subj_i = subj_ids[i]
+#         subj_j = subj_ids[j]
+#
+#         visit_i = times[i]
+#         visit_j = times[j]
+#
+#         if subj_i == subj_j:
+#             z2[i, j] = 1
+#             z3[i, j] = visit_i + visit_j
+#             z4[i, j] = visit_i * visit_j
+#
+# vz1 = flatten(z1.transpose(1, 0)).expand(1, -1).T  # size (batch_size^2, 1)
+# vz2 = flatten(z2.transpose(1, 0)).expand(1, -1).T
+# vz3 = flatten(z3.transpose(1, 0)).expand(1, -1).T
+# vz4 = flatten(z4.transpose(1, 0)).expand(1, -1).T
+# zz = cat((vz1, vz2, vz3, vz4), axis=1)
+#
+# zzt_zz = zz.T @ zz

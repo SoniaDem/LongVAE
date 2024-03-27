@@ -134,7 +134,7 @@ def lvae_loss(target,
         the multivariate normal distribution.
     :param cov_mat: The covariance of z_ijk.
     :param mu: The mean of z_ijk.
-    :param igls_vars: a matrix of ([mu_a0, sig_a0, mu_a1, sig_a1, mu_e, sig_e], k_dims)
+    :param igls_vars: a matrix of ([sig_a0, sig_a1, sig_e], k_dims)
     :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
     :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
     :param bse: If True then implement the reproduction loss.
@@ -152,12 +152,12 @@ def lvae_loss(target,
         losses[1] = bce_loss.item()
 
     if kl:
-        a0_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[1]) - (igls_vars[0] ** 2) - igls_vars[1])
+        a0_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[0]) - igls_vars[0])
         a0_kl /= torch.numel(igls_vars[0])
-        a1_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[3]) - (igls_vars[2] ** 2) - igls_vars[3])
-        a1_kl /= torch.numel(igls_vars[2])
-        e_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[5]) - (igls_vars[4] ** 2) - igls_vars[5])
-        e_kl /= torch.numel(igls_vars[4])
+        a1_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[1]) - igls_vars[1])
+        a1_kl /= torch.numel(igls_vars[1])
+        e_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[2]) - igls_vars[2])
+        e_kl /= torch.numel(igls_vars[2])
         kl_loss = (a0_kl + a1_kl + e_kl) / 3
 
         total_loss += (beta * kl_loss)

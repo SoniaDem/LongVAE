@@ -244,10 +244,10 @@ class VAE_IGLS(Module):
         self.igls_iterations = 1
         self.k_dims = z_dim
         self.reset_sig_est = True
-        self.lvae = False
+        self.lvae = True
         self.linear_log_var = Linear(2560, z_dim)
         self.linear_mu = Linear(2560, z_dim)
-
+        self.delta = 1
 
     def forward(self, x, subject_ids, times):
 
@@ -263,59 +263,31 @@ class VAE_IGLS(Module):
         if self.lvae:
             z_ijk = self.linear_z_ijk(encoded_x)
             # print('z_ijk.shape', z_ijk.shape)
-            cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+            cov_mat1 = self.batch_cov(z_ijk)
+            mu1 = z_ijk.mean(axis=0)
+
+            cov_mat2, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
             # print('cov_mat', cov_mat.shape)
             # print('betahat', betahat.shape)
-            print('sig_randeffs', sig_randeffs.shape)
-            print('sig_errs', sig_errs.shape)
+            # print('sig_randeffs', sig_randeffs.shape)
+            # print('sig_errs', sig_errs.shape)
 
-            mu = betahat[:, 0] + (betahat[:, 1] * times)
+            mu2 = betahat[:, 0] + (betahat[:, 1] * times)
             # print('mu.shape', mu.shape)
 
-            # z_hat = self.igls_reparameterise(mu, cov_mat).squeeze(0).T
-            z_hat = self.igls_reparameterise(mu, cov_mat).T
-            # print('z_hat.shape', z_hat.shape)
-            # z_hat = self.igls_reparameterise(mu, sig_randeffs, sig_errs, times)
+            z_hat = self.igls_reparameterise(mu2, cov_mat2).squeeze(0).T
             # print('z_hat.shape', z_hat.shape)
 
             x = self.decoder(z_hat)
             # print('x.shape', x.shape)
-            return x, z_ijk, z_hat, cov_mat, betahat, mu
+            return x, z_ijk, z_hat, cov_mat1, mu1, cov_mat2, mu2, betahat
 
         else:
             mu = self.linear_mu(encoded_x)
             log_var = self.linear_log_var(encoded_x)
             z = self.reparameterise(mu, log_var)
             x = self.decoder(z)
-            return x, None, None, log_var, None, mu
-
-
-    def reparameterise(self, mu, log_var):
-        std = exp(0.5 * log_var)
-        e = randn_like(std)
-        return mu + (std * e)
-
-
-    @staticmethod
-    def igls_reparameterise(mean, cov_mat):
-        return MultivariateNormal(loc=mean,
-                                  covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
-        # mv_norm = torch.empty(mean.shape).to(self.device)
-        # for i in range(mean.shape[0]):
-        #     mv_norm[i, :] = MultivariateNormal(loc=mean[i],
-        #                                        covariance_matrix=cov_mat[i]).sample([1])
-        # return mv_norm
-
-    # def igls_reparameterise(self, mean, sig_rand_effs, sig_errs, times):
-    #
-    #     a0_a1 = torch.empty((self.k_dims, 2, 2)).to(self.device)
-    #     for i in range(self.k_dims):
-    #         a0_a1[i, :, :] = MultivariateNormal(zeros(2), sig_rand_effs[i]).sample([1])
-    #
-    #     # a0_a1 = MultivariateNormal(zeros(2), sig_rand_effs).sample([1])
-    #     e = Normal(zeros(1), sig_errs).sample([1])
-    #     z_hat = mean + a0_a1[:, :, 0] + (a0_a1[:, :, 1] * times) + e
-    #     return z_hat
+            return x, z, None, None, None, log_var, mu, None
 
     def igls_estimator(self, z_ijk, subject_ids, times):
 
@@ -393,6 +365,11 @@ class VAE_IGLS(Module):
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
 
+        if self.delta is not None:
+            # Add a small value to the diagonal to solve the multivariate sampling issue.
+            diag_ones = eye(sigma_update.shape[1]).repeat(self.k_dims, 1, 1).to(self.device)
+            sigma_update += sigma_update + (self.delta * diag_ones)
+
         sig_rand_eff = torch.empty(self.k_dims, 2, 2)
         sig_errs = sig_est[0]
         for k in range(self.k_dims):
@@ -402,6 +379,36 @@ class VAE_IGLS(Module):
             sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
 
         return sigma_update, betahat, sig_rand_eff, sig_errs
+
+
+    @staticmethod
+    def reparameterise(mu, log_var):
+        std = exp(0.5 * log_var)
+        e = randn_like(std)
+        return mu + (std * e)
+
+    @staticmethod
+    def igls_reparameterise(mean, cov_mat):
+        return MultivariateNormal(loc=mean,
+                                  covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+
+        # mv_norm = torch.empty(mean.shape).to(self.device)
+        # for i in range(mean.shape[0]):
+        #     mv_norm[i, :] = MultivariateNormal(loc=mean[i],
+        #                                        covariance_matrix=cov_mat[i]).sample([1])
+        # return mv_norm
+
+    # def igls_reparameterise(self, mean, sig_rand_effs, sig_errs, times):
+    #
+    #     a0_a1 = torch.empty((self.k_dims, 2, 2)).to(self.device)
+    #     for i in range(self.k_dims):
+    #         a0_a1[i, :, :] = MultivariateNormal(zeros(2), sig_rand_effs[i]).sample([1])
+    #
+    #     # a0_a1 = MultivariateNormal(zeros(2), sig_rand_effs).sample([1])
+    #     e = Normal(zeros(1), sig_errs).sample([1])
+    #     z_hat = mean + a0_a1[:, :, 0] + (a0_a1[:, :, 1] * times) + e
+    #     return z_hat
+
 
 
 class Decoder3d_igls(Module):

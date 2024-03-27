@@ -28,8 +28,11 @@ params = get_args(param_path)  # This will return a dictionary of parameters tha
 name = params["NAME"]
 project_dir = os.path.join(params["PROJECT_DIR"], name)
 
-if not os.path.isdir(project_dir):
+reset = True if 'RESET' in params.keys() and params['RESET'].lower() == 'True' else False
+
+if not os.path.isdir(project_dir) or reset:
     os.mkdir(project_dir)
+    print(f'Made project {project_dir}')
 
 project_files = os.listdir(project_dir)
 h_flip = 0. if "H_FLIP" not in params.keys() else float(params["H_FLIP"])
@@ -46,6 +49,7 @@ beta = 1 if "BETA" not in params["BETA"] else float(params["BETA"])
 gamma = 1 if "GAMMA" not in params["GAMMA"] else float(params["GAMMA"])
 lr = float(params["LR"]) if "LR" in params.keys() else 1e-4
 momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9
+delta = None if "DELTA" not in params.keys() else float(params["DELTA"])
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -114,6 +118,7 @@ elif os.path.isdir(model_dir) and len(os.listdir(model_dir)) == 0:
 else:
     os.mkdir(model_dir)
     pre_epochs = 0
+    print('Made new model.')
 
 model = model.to(device)
 
@@ -122,6 +127,10 @@ model = model.to(device)
 optimizer = torch.optim.SGD(list(model.parameters()),
                             lr=lr,
                             momentum=momentum)
+if delta is not None:
+    model.delta = delta
+
+model.delta = 1e-1
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 
@@ -140,17 +149,19 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         # print('Attached to devices')
 
         optimizer.zero_grad()
-        # print('Zerod optimizer')
-        pred, z_prior, z_post, cov_mat, betahat, mean = model(imgs, subj_ids, times)
-        # print('Passed through model')
+        print('Zerod optimizer')
+        pred, z_prior, z_post, cov_mat1, mu1, cov_mat2, mu2, betahat = model(imgs, subj_ids, times)
+        print('Passed through model')
 
 
         loss, each_loss = lvae_loss(target=imgs,
                                     output=pred,
                                     prior_z=z_prior,
                                     post_z=z_post,
-                                    mean=mean,
-                                    cov_mat=cov_mat,
+                                    mu1=mu1,
+                                    cov_mat1=cov_mat1,
+                                    mu2=mu2,
+                                    cov_mat2=cov_mat2,
                                     bse=recon_loss,
                                     kl=kl_loss,
                                     align=align_loss,
@@ -158,13 +169,12 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
                                     gamma=gamma
                                     )
 
-        # print('got loss value', each_loss)
+        print('got loss value', each_loss)
         loss.backward(retain_graph=True)
-        # print('done loss.backward()')
+        print('done loss.backward()')
         optimizer.step()
-        # print('stepped optimizer')
-        epoch_losses.append([loss.item(), 0, 0, 0])
-        # epoch_losses.append(each_loss)
+        print('stepped optimizer')
+        epoch_losses.append(each_loss)
 
     epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
     losses.append(epoch_losses)
@@ -202,12 +212,6 @@ plot_loss(losses_txt[10:])
 
 
 
-
-
-
-
-
-
 # test_imgs, test_ids, test_times = next(iter(dataloader))
 #
 # test_imgs = test_imgs.to(device)
@@ -219,7 +223,6 @@ plot_loss(losses_txt[10:])
 # # out, sig, beta, mu = model(test_imgs, test_ids, test_times)
 #
 # x = model(test_imgs, test_ids, test_times)
-
 
 
 

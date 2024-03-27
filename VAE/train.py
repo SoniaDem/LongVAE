@@ -108,8 +108,10 @@ def lvae_loss(target,
               output,
               prior_z,
               post_z,
-              mean,
-              cov_mat,
+              mu1,
+              cov_mat1,
+              mu2,
+              cov_mat2,
               beta=1,
               gamma=1,
               bse=True,
@@ -131,8 +133,10 @@ def lvae_loss(target,
     :param prior_z: z_ijk which is output from the encoder and the linear layer.
     :param post_z: z_hat which is following the IGLS estimation method and sampling of
         the multivariate normal distribution.
-    :param mean: The mean values for each IGLS models of z_ijk.
-    :param cov_mat: The covariance matrices from each of the IGLS models of z_ijk.
+    :param cov_mat1: The covariance of z_ijk.
+    :param mu1: The mean of z_ijk.
+    :param cov_mat2: The covariance matrices from each of the IGLS models of z_ijk.
+    :param mu2: The mean values for each IGLS models of z_ijk.
     :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
     :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
     :param bse: If True then implement the reproduction loss.
@@ -150,16 +154,18 @@ def lvae_loss(target,
         losses[1] = bce_loss.item()
 
     if kl:
+
+        kl_loss = 0
         kl_loss = -0.5 * torch.sum(1 + cov_mat - (mean ** 2) - torch.exp(cov_mat))
         kl_loss /= torch.numel(mean.data)
         total_loss += (beta * kl_loss)
         losses[2] = (beta * kl_loss.item())
-        # raise Exception('Not implemented')
+        raise Exception('Not implemented')
 
     if align:
-        # align_loss = 0
-        # total_loss += (gamma * align_loss)
-        # losses[3] = (gamma * align_loss.item())
+        align_loss = F.mse_loss(prior_z, post_z, reduction='mean')
+        total_loss += (gamma * align_loss)
+        losses[3] = (gamma * align_loss.item())
         raise Exception('Not implemented')
 
     losses[0] = total_loss.item()
@@ -223,3 +229,4 @@ def lvae_loss(target,
 #         losses.append(train_loss)
 #         print('Epoch: {}\tTraining Loss: {:.6f}'.format(epoch, train_loss))
 #     return losses
+

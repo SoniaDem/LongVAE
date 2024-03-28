@@ -134,12 +134,12 @@ if delta is not None:
 
 losses = []
 for epoch in range(pre_epochs, pre_epochs + epochs):
-    print(f'Epoch [{epoch + 1} / {pre_epochs + epochs}]')
+    # print(f'Epoch [{epoch + 1} / {pre_epochs + epochs}]')
 
     epoch_losses = []
     for batch_no, batch in enumerate(dataloader):
 
-        print(f'\tBatch [{batch_no + 1} / {len(dataloader)}]')
+        print(f'\tEpoch [{epoch + 1} / {pre_epochs + epochs}]  -  Batch [{batch_no + 1} / {len(dataloader)}]')
 
         imgs = batch[0].to(device)
         subj_ids = batch[1].to(device)
@@ -173,7 +173,6 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         optimizer.step()
         # print('stepped optimizer')
         epoch_losses.append(each_loss)
-
     print(epoch_losses)
     epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
     print(epoch_losses)
@@ -256,3 +255,5 @@ test_imgs, test_ids, test_times = next(iter(dataloader))
 # zz = cat((vz1, vz2, vz3, vz4), axis=1)
 #
 # zzt_zz = zz.T @ zz
+
+from torch.nn.functional import tanh

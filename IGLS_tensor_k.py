@@ -10,6 +10,8 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 import torch
 from random import randint
 
+torch.set_default_dtype(torch.float64)
+
 # --------------------------------------------------------------------------------------------------------------
 
 # Define parameters
@@ -144,7 +146,15 @@ while k <= iter:
     s_a01 = expand_vec(z3, sig_est[2])
     s_a1 = expand_vec(z4, sig_est[3])
 
-    sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4) # size (k_dims, 100, 100)
+    sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)  # size (k_dims, 100, 100)
+
+    if k == iter:
+        print(torch.det(sigma_update))
+    #     for l in range(sigma_update.shape[0]):
+    #         if torch.det(sigma_update[l]) == 0:
+    #             print(torch.det(sigma_update[l]))
+    #             print(inverse(sigma_update[l]))
+    #             print('')
 
     b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))  # size (k_dims, 2, 2)
     # b2 size (k_dims, 2, 1)

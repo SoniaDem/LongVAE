@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
+from torch.utils.data.sampler import Sampler
 from torchvision.transforms import ToTensor
 import numpy as np
 import nibabel as nib
@@ -161,3 +162,6 @@ class LongDataset(Dataset):
         tensor_image = tensor_image.transpose_(3, 1)
         tensor_image = tensor_image.type(torch.FloatTensor)
         return tensor_image, subject_id_num, times
+
+
+class SubjectBatchSampler()

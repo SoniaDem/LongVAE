@@ -261,7 +261,7 @@ class VAE_IGLS(Module):
         # print('\nencoded_x.shape', encoded_x.shape)
 
         if self.lvae:
-            z_ijk = self.linear_z_ijk(encoded_x)
+            z_ijk = F.sigmoid(self.linear_z_ijk(encoded_x))
             # print('z_ijk.shape', z_ijk.shape)
 
             cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
@@ -373,6 +373,7 @@ class VAE_IGLS(Module):
             # print(L)
             # print(L @ L.mT)
             # size (k_dims, 2, 2)
+            print(torch.det(sigma_update))
             inv_sig_up = inverse(sigma_update)
             print('inv sig up', inv_sig_up.shape)
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))

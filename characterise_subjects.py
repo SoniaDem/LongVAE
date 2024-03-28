@@ -22,7 +22,7 @@ root_path = 'D:\\norm_subjects\\nuyl_4x4_down\\'
 paths = glob(root_path + '*')
 
 # Isolate the image names
-name_list = [path.basename(n) for n in paths]
+name_list = [os.path.basename(n) for n in paths]
 
 # The image name is formatted as 'sub-ADNI941S1194_ses...nii.gz'. We just want the subject id 'ADNI...'
 subj_ids = [n.replace('_', '-').split('-')[1] for n in name_list]
@@ -41,4 +41,7 @@ key_df = pd.DataFrame({'ADNI_ID': unique_ids,
                        'NUM_ID': char_ids})
 cwd = os.getcwd()
 key_df.to_csv(os.path.join(cwd, 'subject_id_key.csv'), index=False)
+
+
+
 

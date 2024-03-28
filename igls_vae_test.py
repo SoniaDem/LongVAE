@@ -14,7 +14,7 @@ import os
 # import sys
 
 from VAE.models import VAE_IGLS
-from VAE.dataloader import LongDataset
+from VAE.dataloader import LongDataset, SubjectBatchSampler
 from VAE.train import lvae_loss, loss_fn
 from VAE.utils import get_args, list_to_str
 
@@ -28,9 +28,9 @@ params = get_args(param_path)  # This will return a dictionary of parameters tha
 name = params["NAME"]
 project_dir = os.path.join(params["PROJECT_DIR"], name)
 
-reset = True if 'RESET' in params.keys() and params['RESET'].lower() == 'True' else False
+# reset = True if 'RESET' in params.keys() and params['RESET'].lower() == 'true' else False
 
-if not os.path.isdir(project_dir) or reset:
+if not os.path.isdir(project_dir):
     os.mkdir(project_dir)
     print(f'Made project {project_dir}')
 
@@ -50,6 +50,8 @@ gamma = 1 if "GAMMA" not in params["GAMMA"] else float(params["GAMMA"])
 lr = float(params["LR"]) if "LR" in params.keys() else 1e-4
 momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9
 delta = None if "DELTA" not in params.keys() else float(params["DELTA"])
+sampler_params = [3, 6] if 'SAMPLER_PARAMS' not in params.keys() else params['SAMPLER_PARAMS']
+use_sampler = True if 'USE_SAMPLER' not in params.keys() or params["USE_SAMPLER"].lower() == 'true' else False
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -74,14 +76,29 @@ loaded_data = LongDataset(image_list=paths,
                           subject_key=subject_key,
                           transformations=transforms)
 
-dataloader = DataLoader(dataset=loaded_data,
-                        batch_size=batch_size,
-                        num_workers=0,
-                        shuffle=shuffle_batches)
+if use_sampler:
+    custom_sampler = SubjectBatchSampler(subject_dict=loaded_data.subj_dict,
+                                         batch_size=batch_size,
+                                         min_data=int(sampler_params[0]),
+                                         max_data=int(sampler_params[1]))
+
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_sampler=custom_sampler)
+
+else:
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_size=batch_size,
+                            shuffle=True)
+
 
 print(f'Loaded data: \n\tTotal data points {len(dataloader.dataset)}, '
       f'\n\tBatches {len(dataloader)}, '
       f'\n\tBatch_size {dataloader.batch_size}.')
+
+# for i, test in enumerate(dataloader):
+#     print(f'batch {i}, size {test[0].shape[0]}')
 
 # ----------------------------------------- Initiate Loss File ----------------------------------------------------
 
@@ -130,6 +147,8 @@ optimizer = torch.optim.SGD(list(model.parameters()),
 if delta is not None:
     model.delta = delta
 
+model.estimate_with_igls = True if kl_loss else False
+
 # ----------------------------------------- Train Model ----------------------------------------------------
 
 losses = []
@@ -144,7 +163,7 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         imgs = batch[0].to(device)
         subj_ids = batch[1].to(device)
         times = batch[2].to(device)
-        print(f'No. unique patients {subj_ids.unique().shape}')
+        # print(f'No. unique patients {subj_ids.unique().shape}')
         # print('Attached to devices')
 
         optimizer.zero_grad()
@@ -173,9 +192,9 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         optimizer.step()
         # print('stepped optimizer')
         epoch_losses.append(each_loss)
-    print(epoch_losses)
+    # print(epoch_losses)
     epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
-    print(epoch_losses)
+    # print(epoch_losses)
     losses.append(epoch_losses)
 
     # Save the model and the losses to the file if the correct epoch
@@ -210,7 +229,6 @@ losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
 plot_loss(losses_txt[10:])
 
 plot_loss(np.asarray(losses)[:, 0])
-
 
 
 test_imgs, test_ids, test_times = next(iter(dataloader))

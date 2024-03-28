@@ -128,6 +128,17 @@ class LongDataset(Dataset):
         self.subject_key = subject_key
         self.transformations = transformations
 
+        self.subj_dict = {}
+        for idx in range(self.__len__()):
+            image_name = basename(self.image_list[idx])
+            image_name = image_name.replace('_', '-').split('-')
+            subject_id_adni = image_name[1]
+            subject_id_num = self.subject_key[self.subject_key["ADNI_ID"] == subject_id_adni]['NUM_ID'].item()
+            if subject_id_num not in self.subj_dict:
+                self.subj_dict[subject_id_num] = [idx]
+            else:
+                self.subj_dict[subject_id_num].append(idx)
+
     def __len__(self):
         return len(self.image_list)
 
@@ -164,4 +175,54 @@ class LongDataset(Dataset):
         return tensor_image, subject_id_num, times
 
 
-class SubjectBatchSampler()
+class SubjectBatchSampler(Sampler):
+    """
+    Ensure that there are a specified minimum number of data points for each unique subject in each batch.
+
+    Args:
+        subject_dict: A dictionary containing {subject_id: [times]}
+        batch_size: size of mini-batch
+        min_data: Minimum number of data points for each unique subject.
+        max_data: Maximum number of data points for each unique subject.
+    """
+
+    def __init__(self, subject_dict, batch_size, min_data=3, max_data=6):
+        # build data sampling here
+        self.subj_dict = subject_dict
+        self.batch_size = batch_size
+        self.min_data = min_data
+        self.max_data = max_data
+
+    def __iter__(self):
+        # implement logic for sampling here
+
+        # Create a random sample of subject ids
+        rand_subj = torch.randint(low=0, high=len(self.subj_dict.keys()), size=(len(self.subj_dict.keys()),))
+
+        batch = []
+        for i in rand_subj:
+            subj_id = list(self.subj_dict.keys())[i]
+            sample_times = torch.randint(low=self.min_data, high=self.max_data, size=(1,)).item()
+            # print('sample times', sample_times)
+            # print(len(self.subj_dict[subj_id]))
+            sample_size = len(self.subj_dict[subj_id]) if len(self.subj_dict[subj_id]) < sample_times else sample_times
+
+            rand_times = torch.randperm(len(self.subj_dict[subj_id]))[:sample_size]
+            # rand_times = torch.randint(low=0, high=len(self.subj_dict[subj_id]), size=(sample_size,))
+            # rand_times = torch.randperm(sample_size)
+            for t in rand_times:
+                batch.append(self.subj_dict[subj_id][t.item()])
+                # print(self.subj_dict[subj_id][t.item()])
+                if len(batch) == self.batch_size:
+                    # print(batch)
+                    yield batch
+                    batch = []
+
+        # batch = []
+        # for i, (img, subj_id, time) in enumerate(self.data):
+        #     batch.append(i)
+        #     if len(batch) == self.batch_size
+        #         yield batch
+        #         batch = []
+    def __len__(self):
+        return len(self.subj_dict.keys())

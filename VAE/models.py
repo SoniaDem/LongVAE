@@ -245,6 +245,7 @@ class VAE_IGLS(Module):
         self.k_dims = z_dim
         self.reset_sig_est = True
         self.lvae = True
+        self.estimate_with_igls = True
         self.linear_log_var = Linear(2560, z_dim)
         self.linear_mu = Linear(2560, z_dim)
         self.delta = 1
@@ -264,29 +265,39 @@ class VAE_IGLS(Module):
             z_ijk = F.sigmoid(self.linear_z_ijk(encoded_x))
             # print('z_ijk.shape', z_ijk.shape)
 
-            cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
-            # print('cov_mat', cov_mat.shape)
-            # print('betahat', betahat.shape)
-            # print('sig_randeffs', sig_randeffs.shape)
-            # print('sig_errs', sig_errs.shape)
+            if self.estimate_with_igls:
+                cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+                # print('cov_mat', cov_mat.shape)
+                # print('betahat', betahat.shape)
+                # print('sig_randeffs', sig_randeffs.shape)
+                # print('sig_errs', sig_errs.shape)
 
-            mu = betahat[:, 0] + (betahat[:, 1] * times)
-            # print('mu.shape', mu.shape)
+                mu = betahat[:, 0] + (betahat[:, 1] * times)
+                # print('mu.shape', mu.shape)
 
-            # z_hat = self.igls_reparameterise_mulvar(mu, cov_mat).squeeze(0).T
-            a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs)
-            z_hat = mu.T + a0 + a1 + e
-            # print('z_hat.shape', z_hat.shape)
-            # print('a0.shape', a0.shape)
-            # print('a1.shape', a1.shape)
-            # print('e.shape', e.shape)
+                # z_hat = self.igls_reparameterise_mulvar(mu, cov_mat).squeeze(0).T
+                a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs)
+                z_hat = mu.T + a0 + a1 + e
+                # print('z_hat.shape', z_hat.shape)
+                # print('a0.shape', a0.shape)
+                # print('a1.shape', a1.shape)
+                # print('e.shape', e.shape)
 
-            igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
-                                   sig_randeffs[:, 1, 1].expand(1, -1),
-                                   sig_errs.expand(1, -1)], axis=0)
-            # print('igls_vars', igls_vars.shape)
+                igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
+                                       sig_randeffs[:, 1, 1].expand(1, -1),
+                                       sig_errs.expand(1, -1)], axis=0)
 
-            x = self.decoder(z_hat)
+                # print('igls_vars', igls_vars.shape)
+
+                x = self.decoder(z_hat)
+            else:
+                x = self.decoder(z_ijk)
+                z_hat = z_ijk
+                cov_mat = None,
+                mu = None,
+                betahat = None
+                igls_vars = None
+
             # print('x.shape', x.shape)
             return x, z_ijk, z_hat, cov_mat, mu, betahat, igls_vars
 
@@ -365,6 +376,7 @@ class VAE_IGLS(Module):
 
             # size (k_dims, batch_size, batch_size)
             sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            sigma_update = sigma_update.double()
             print('igls sigma_update', sigma_update.shape)
             # if sigma_update.min() <= 0:
             #     print(sigma_update)

@@ -274,4 +274,15 @@ test_imgs, test_ids, test_times = next(iter(dataloader))
 #
 # zzt_zz = zz.T @ zz
 
-from torch.nn.functional import tanh
+# import pandas as pd
+# z_prior = z_prior.detach().cpu().numpy()
+# z_df = pd.DataFrame(z_prior)
+# z_df.to_csv('D:\\ADNI_VAE\\NonsenseFiles\\z_vae_ijk.csv', index=False)
+#
+# times = times.detach().cpu().numpy()
+# time_df = pd.DataFrame(times)
+# time_df.to_csv('D:\\ADNI_VAE\\NonsenseFiles\\z_vae_time.csv', index=False)
+#
+# subj_ids = subj_ids.detach().cpu().numpy()
+# subj_df = pd.DataFrame(subj_ids)
+# subj_df.to_csv('D:\\ADNI_VAE\\NonsenseFiles\\z_vae_subj.csv', index=False)

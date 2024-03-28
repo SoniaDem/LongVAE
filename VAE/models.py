@@ -262,7 +262,7 @@ class VAE_IGLS(Module):
         # print('\nencoded_x.shape', encoded_x.shape)
 
         if self.lvae:
-            z_ijk = F.sigmoid(self.linear_z_ijk(encoded_x))
+            z_ijk = self.linear_z_ijk(encoded_x)
             # print('z_ijk.shape', z_ijk.shape)
 
             if self.estimate_with_igls:
@@ -385,9 +385,19 @@ class VAE_IGLS(Module):
             # print(L)
             # print(L @ L.mT)
             # size (k_dims, 2, 2)
+
+            ## --------------------------- The problem is here ---------------------------
             print(torch.det(sigma_update))
             inv_sig_up = inverse(sigma_update)
-            print('inv sig up', inv_sig_up.shape)
+            print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
+            print(inv_sig_up)
+            print('xxt', xx.transpose(2, 1).shape, xx.device)
+            xx_inv_sig = bmm(xx.transpose(2, 1), inv_sig_up)
+            print('xx.T sig_up', xx_inv_sig.shape)
+            b05 = bmm(xx_inv_sig, xx)
+            print('b05', b05.shape)
+            ## --------------------------- The problem is above ---------------------------
+
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
             print('b1', b1.shape)
             # b2 size (k_dims, 2, 1)

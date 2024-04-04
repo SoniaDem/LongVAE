@@ -484,6 +484,226 @@ class VAE_IGLS(Module):
     #     return z_hat
 
 
+class LVAE_LIN(Module):
+    def __init__(self, z_dim):
+        super(LVAE_LIN, self).__init__()
+        self.batch_size = None
+        self.device = None
+        self.encoder = Encoder3d()
+        self.linear_z_ijk = Linear(2560, z_dim)
+        self.decoder = Decoder3d_igls(z_dims=z_dim, flat_dim=2560)
+        self.igls_iterations = 1
+        self.k_dims = z_dim
+        self.reset_sig_est = True
+        self.linear_var = Linear(z_dim, z_dim)
+        self.linear_mu = Linear(z_dim, z_dim)
+        self.delta = 1
+
+    def forward(self, x, subject_ids, times):
+
+        # print('\nx.shape', x.shape)
+        # print('subject_ids.shape', subject_ids.shape)
+        # print('times.shape', times.shape)
+
+        self.device = x.device
+        self.batch_size = x.shape[0]
+        encoded_x = self.encoder(x)
+        # print('\nencoded_x.shape', encoded_x.shape)
+
+        z_ijk = self.linear_z_ijk(encoded_x)
+        # print('z_ijk.shape', z_ijk.shape)
+
+        lin_mu = self.linear_mu(z_ijk)
+        # print('mu.shape', mu.shape)
+        lin_var = self.linear_var(z_ijk)
+        # print('log_var.shape', log_var.shape)
+        lin_z_hat = self.reparameterise(lin_mu, lin_var)
+        # print('lin_z_hat.shape', lin_z_hat.shape)
+        x = self.decoder(lin_z_hat)
+        # print('x.shape', x.shape)
+
+        cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+        # print('cov_mat', cov_mat.shape)
+        # print('betahat', betahat.shape)
+        # print('sig_randeffs', sig_randeffs.shape)
+        # print('sig_errs', sig_errs.shape)
+
+        mu = betahat[:, 0] + (betahat[:, 1] * times)
+        # print('mu.shape', mu.shape)
+
+        a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs)
+        mm_z_hat = mu.T + a0 + a1 + e
+        # print('z_hat.shape', z_hat.shape)
+        # print('a0.shape', a0.shape)
+        # print('a1.shape', a1.shape)
+        # print('e.shape', e.shape)
+
+        igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
+                               sig_randeffs[:, 1, 1].expand(1, -1),
+                               sig_errs.expand(1, -1)], axis=0)
+
+        # print('igls_vars', igls_vars.shape)
+
+        return x, lin_z_hat, mm_z_hat, mu, betahat, igls_vars
+
+    def igls_estimator(self, z_ijk, subject_ids, times):
+
+        # z_ijk = z_ijk * 10
+
+        z1 = eye(self.batch_size).to(self.device)
+        z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z3 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z4 = zeros((self.batch_size, self.batch_size)).to(self.device)
+
+        for i in range(self.batch_size):
+            for j in range(self.batch_size):
+
+                subj_i = subject_ids[i]
+                subj_j = subject_ids[j]
+
+                visit_i = times[i]
+                visit_j = times[j]
+
+                if subj_i == subj_j:
+                    z2[i, j] = 1
+                    z3[i, j] = visit_i + visit_j
+                    z4[i, j] = visit_i * visit_j
+
+        xx = ones((self.k_dims, self.batch_size, 2)).to(self.device)  # size (k_dims, batch_size, 2)
+        xx[:, :, 1] = times.repeat(self.k_dims, 1)  # size (k_dims, batch_size, 2)
+        b1 = inverse(bmm(xx.transpose(2, 1), xx))  # following bmm, the size is (k_dims, 2, 2). This will do the
+        # inverse of  each (2, 2) matrix.
+        b2 = bmm(xx.transpose(2, 1), z_ijk.expand(1, -1, -1).transpose(2, 0))
+        betahat = bmm(b1, b2)  # size (k_dims, 2, 1)
+
+        vz1 = flatten(z1.transpose(1, 0)).expand(1, -1).T  # size (batch_size^2, 1)
+        vz2 = flatten(z2.transpose(1, 0)).expand(1, -1).T
+        vz3 = flatten(z3.transpose(1, 0)).expand(1, -1).T
+        vz4 = flatten(z4.transpose(1, 0)).expand(1, -1).T
+        zz = cat((vz1, vz2, vz3, vz4), axis=1)  # size (batch_size^2, 4)
+        # print('igls zz', zz.shape)
+        # print('zz', zz)
+
+        z1 = z1.repeat(self.k_dims, 1, 1)  # size (k_dims, batch_size, batch_size)
+        z2 = z2.repeat(self.k_dims, 1, 1)
+        z3 = z3.repeat(self.k_dims, 1, 1)
+        z4 = z4.repeat(self.k_dims, 1, 1)
+
+        sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
+        for _ in range(self.igls_iterations):
+            zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
+            ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
+            ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
+            ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
+            ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
+            # print('igls ztz', ztz.shape)
+
+            # size (4, k_dims)
+            sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
+            # print('igls sig est', sig_est.shape)
+
+            # HERE WE FORCED SMALL NEGATIVE VALUES to be zero because we need the
+            # covariance matrix to be positive definite.
+            if self.reset_sig_est:
+                sig_est[torch.where(sig_est <= 0)] = 1e-6
+
+            # size (k_dims, 1, 1)
+            s_e = expand_vec(z1, sig_est[0])
+            s_a0 = expand_vec(z2, sig_est[1])
+            s_a01 = expand_vec(z3, sig_est[2])
+            s_a1 = expand_vec(z4, sig_est[3])
+            # print('igls idk')
+
+            # size (k_dims, batch_size, batch_size)
+            sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            sigma_update = sigma_update.double()
+            # print('igls sigma_update', sigma_update.shape)
+            # if sigma_update.min() <= 0:
+            #     print(sigma_update)
+
+            # L = torch.linalg.cholesky(sigma_update)
+            # print(L)
+            # print(L @ L.mT)
+            # size (k_dims, 2, 2)
+
+            ## --------------------------- The problem is here ---------------------------
+            # print(torch.det(sigma_update))
+            inv_sig_up = inverse(sigma_update).float()
+            sigma_update = sigma_update.float()
+            # print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
+            # print(inv_sig_up)
+            # print('xxt', xx.transpose(2, 1).shape, xx.device)
+            # xx_inv_sig = bmm(xx.transpose(2, 1), inv_sig_up)  # <------------------------------------
+            # print('xx.T sig_up', xx_inv_sig.shape)
+            # b05 = bmm(xx_inv_sig, xx)
+            # print('b05', b05.shape)
+            ## --------------------------- The problem is above ---------------------------
+
+            # b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
+            b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
+            # print('b1', b1.shape)
+            # b2 size (k_dims, 2, 1)
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            # print('b2', b2.shape)
+            # size (k_dims, 2, 1)
+            betahat = bmm(b1, b2)
+            # print('betahat', betahat.shape)
+            # print('igls betahat', betahat.shape)
+
+        if self.delta is not None:
+            # Add a small value to the diagonal to solve the multivariate sampling issue.
+            diag_ones = eye(sigma_update.shape[1]).repeat(self.k_dims, 1, 1).to(self.device)
+            sigma_update += sigma_update + (self.delta * diag_ones)
+
+        # print('igls betahat', betahat.shape)
+        # print('igls sigma_update', sigma_update.shape)
+        sig_rand_eff = torch.empty(self.k_dims, 2, 2).to(self.device)
+        sig_errs = sig_est[0].to(self.device)
+        for k in range(self.k_dims):
+            s_a0 = sig_est[1][k]
+            s_a01 = sig_est[2][k]
+            s_a1 = sig_est[3][k]
+            sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
+
+        # print('igls sig_rand_eff', sig_rand_eff.shape)
+        # print('igls sig_e', sig_errs.shape)
+
+
+        return sigma_update, betahat, sig_rand_eff, sig_errs
+
+
+    @staticmethod
+    def reparameterise(mu, var):
+        std = torch.sqrt(var)
+        e = randn_like(std)
+        return mu + (std * e)
+
+
+    def igls_reparameterise(self, sig_rand_effs, sig_errs):
+
+        s_a0 = sig_rand_effs[:, 0, 0]
+        s_a1 = sig_rand_effs[:, 1, 1]
+        # print('s_a0', s_a0)
+
+        # print('s_a0', s_a0.shape, s_a0.device)
+        # print('s_a1', s_a1.shape, s_a1.device)
+
+        mean_zeros = zeros_like(s_a0)
+
+        a0 = Normal(mean_zeros, s_a0).sample([self.batch_size])
+        # print('a0', a0.shape, a0.device)
+        a1 = Normal(mean_zeros, s_a1).sample([self.batch_size])
+        # print('a1', a1.shape, s_a1.device)
+        e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
+        # print('e', e.shape, e.device)
+
+        return a0, a1, e
+
+    @staticmethod
+    def igls_reparameterise_multivar(mean, cov_mat):
+        return MultivariateNormal(loc=mean,
+                                  covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+
 
 class Decoder3d_igls(Module):
     def __init__(self, z_dims, flat_dim):

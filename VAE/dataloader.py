@@ -208,6 +208,7 @@ class SubjectBatchSampler(Sampler):
             sample_size = len(self.subj_dict[subj_id]) if len(self.subj_dict[subj_id]) < sample_times else sample_times
 
             rand_times = torch.randperm(len(self.subj_dict[subj_id]))[:sample_size]
+
             # rand_times = torch.randint(low=0, high=len(self.subj_dict[subj_id]), size=(sample_size,))
             # rand_times = torch.randperm(sample_size)
             for t in rand_times:

@@ -310,6 +310,8 @@ class VAE_IGLS(Module):
 
     def igls_estimator(self, z_ijk, subject_ids, times):
 
+        # z_ijk = z_ijk * 10
+
         z1 = eye(self.batch_size).to(self.device)
         z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
         z3 = zeros((self.batch_size, self.batch_size)).to(self.device)
@@ -356,11 +358,11 @@ class VAE_IGLS(Module):
             ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
             ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
             ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
-            print('igls ztz', ztz.shape)
+            # print('igls ztz', ztz.shape)
 
             # size (4, k_dims)
             sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
-            print('igls sig est', sig_est.shape)
+            # print('igls sig est', sig_est.shape)
 
             # HERE WE FORCED SMALL NEGATIVE VALUES to be zero because we need the
             # covariance matrix to be positive definite.
@@ -372,12 +374,12 @@ class VAE_IGLS(Module):
             s_a0 = expand_vec(z2, sig_est[1])
             s_a01 = expand_vec(z3, sig_est[2])
             s_a1 = expand_vec(z4, sig_est[3])
-            print('igls idk')
+            # print('igls idk')
 
             # size (k_dims, batch_size, batch_size)
             sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
             sigma_update = sigma_update.double()
-            print('igls sigma_update', sigma_update.shape)
+            # print('igls sigma_update', sigma_update.shape)
             # if sigma_update.min() <= 0:
             #     print(sigma_update)
 
@@ -387,25 +389,27 @@ class VAE_IGLS(Module):
             # size (k_dims, 2, 2)
 
             ## --------------------------- The problem is here ---------------------------
-            print(torch.det(sigma_update))
-            inv_sig_up = inverse(sigma_update)
-            print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
-            print(inv_sig_up)
-            print('xxt', xx.transpose(2, 1).shape, xx.device)
-            xx_inv_sig = bmm(xx.transpose(2, 1), inv_sig_up)
-            print('xx.T sig_up', xx_inv_sig.shape)
-            b05 = bmm(xx_inv_sig, xx)
-            print('b05', b05.shape)
+            # print(torch.det(sigma_update))
+            inv_sig_up = inverse(sigma_update).float()
+            sigma_update = sigma_update.float()
+            # print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
+            # print(inv_sig_up)
+            # print('xxt', xx.transpose(2, 1).shape, xx.device)
+            # xx_inv_sig = bmm(xx.transpose(2, 1), inv_sig_up)  # <------------------------------------
+            # print('xx.T sig_up', xx_inv_sig.shape)
+            # b05 = bmm(xx_inv_sig, xx)
+            # print('b05', b05.shape)
             ## --------------------------- The problem is above ---------------------------
 
-            b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
-            print('b1', b1.shape)
+            # b1 = inverse(bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), xx))
+            b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
+            # print('b1', b1.shape)
             # b2 size (k_dims, 2, 1)
-            b2 = bmm(bmm(xx.transpose(2, 1), inverse(sigma_update)), z_ijk.expand(1, -1, -1).transpose(2, 0))
-            print('b2', b2.shape)
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            # print('b2', b2.shape)
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
-            print('betahat', betahat.shape)
+            # print('betahat', betahat.shape)
             # print('igls betahat', betahat.shape)
 
         if self.delta is not None:

@@ -228,7 +228,7 @@ losses_txt = [l.strip('\n') for l in open(os.path.join(project_dir, loss_filenam
 losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
 plot_loss(losses_txt[10:])
 
-plot_loss(np.asarray(losses)[:, 0])
+plot_loss(np.asarray(losses)[:-2, 3])
 
 
 test_imgs, test_ids, test_times = next(iter(dataloader))

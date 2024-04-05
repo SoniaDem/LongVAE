@@ -5,7 +5,8 @@ import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.normal import Normal
 from torch import sigmoid, exp, randn_like, tensor, repeat_interleave, \
-    normal, zeros, ones, eye, inverse, flatten, cat, bmm, mul, add, zeros_like
+    normal, zeros, ones, eye, inverse, flatten, cat, bmm, mul, add, zeros_like, \
+    pow, empty
 from torch.nn.parameter import Parameter
 import torch
 
@@ -523,28 +524,30 @@ class LVAE_LIN(Module):
         # print('x.shape', x.shape)
 
         cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
-        # print('cov_mat', cov_mat.shape)
-        # print('betahat', betahat.shape)
-        # print('sig_randeffs', sig_randeffs.shape)
-        # print('sig_errs', sig_errs.shape)
+        print('cov_mat', cov_mat.shape)
+        print('betahat', betahat.shape)
+        print('sig_randeffs', sig_randeffs.shape)
+        print('sig_errs', sig_errs.shape)
 
-        mu = betahat[:, 0] + (betahat[:, 1] * times)
+        mm_mu = betahat[:, 0] + (betahat[:, 1] * times)
         # print('mu.shape', mu.shape)
 
-        a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs)
-        mm_z_hat = mu.T + a0 + a1 + e
-        # print('z_hat.shape', z_hat.shape)
-        # print('a0.shape', a0.shape)
-        # print('a1.shape', a1.shape)
-        # print('e.shape', e.shape)
+        a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs, subject_ids)
+        mm_z_hat = mm_mu.T + a0 + a1 + e
+        print('z_hat.shape', mm_z_hat.shape)
+        print('a0.shape', a0.shape)
+        print('a1.shape', a1.shape)
+        print('e.shape', e.shape)
 
-        igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
-                               sig_randeffs[:, 1, 1].expand(1, -1),
-                               sig_errs.expand(1, -1)], axis=0)
+        # igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
+        #                        sig_randeffs[:, 1, 1].expand(1, -1),
+        #                        sig_errs.expand(1, -1)], axis=0)
+
+        mm_var = sig_randeffs[:, 0, 0] + (sig_randeffs[:, 1, 1] * pow(times, 2)) + sig_errs
 
         # print('igls_vars', igls_vars.shape)
 
-        return x, lin_z_hat, mm_z_hat, mu, betahat, igls_vars
+        return x, lin_z_hat, lin_mu, lin_var, mm_z_hat, mm_mu, mm_var
 
     def igls_estimator(self, z_ijk, subject_ids, times):
 
@@ -679,23 +682,39 @@ class LVAE_LIN(Module):
         return mu + (std * e)
 
 
-    def igls_reparameterise(self, sig_rand_effs, sig_errs):
+    def igls_reparameterise(self, sig_rand_effs, sig_errs, subject_ids):
 
         s_a0 = sig_rand_effs[:, 0, 0]
         s_a1 = sig_rand_effs[:, 1, 1]
         # print('s_a0', s_a0)
 
-        # print('s_a0', s_a0.shape, s_a0.device)
-        # print('s_a1', s_a1.shape, s_a1.device)
+        print('s_a0', s_a0.shape, s_a0.device)
+        print('s_a1', s_a1.shape, s_a1.device)
+
+        a0 = empty(self.batch_size, self.k_dims).to(self.device)
+        a1 = empty(self.batch_size, self.k_dims).to(self.device)
 
         mean_zeros = zeros_like(s_a0)
 
-        a0 = Normal(mean_zeros, s_a0).sample([self.batch_size])
-        # print('a0', a0.shape, a0.device)
-        a1 = Normal(mean_zeros, s_a1).sample([self.batch_size])
-        # print('a1', a1.shape, s_a1.device)
+        unique_ids = torch.unique(subject_ids)
+        for subj_id in unique_ids:
+            a0[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a0).sample([1])
+            a1[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a1).sample([1])
+
         e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
-        # print('e', e.shape, e.device)
+
+        print('\tsubject ids')
+        print(subject_ids)
+        print('')
+        print('\ta0')
+        print(a0[:, 0])
+
+        # a0 = Normal(mean_zeros, s_a0).sample([self.batch_size])
+        # print('a0', a0.shape, a0.device)
+        # a1 = Normal(mean_zeros, s_a1).sample([self.batch_size])
+        # # print('a1', a1.shape, s_a1.device)
+        # e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
+        # # print('e', e.shape, e.device)
 
         return a0, a1, e
 

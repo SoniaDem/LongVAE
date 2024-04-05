@@ -1,4 +1,5 @@
 import torch
+from torch import empty, diag
 import torch.nn.functional as F
 
 
@@ -162,10 +163,88 @@ def lvae_loss(target,
 
         total_loss += (beta * kl_loss)
         losses[2] = (beta * kl_loss.item())
-        # raise Exception('Not implemented')
 
     if align:
         align_loss = F.mse_loss(prior_z, post_z, reduction='mean')
+        total_loss += (gamma * align_loss)
+        losses[3] = (gamma * align_loss.item())
+
+    losses[0] = total_loss.item()
+
+    return total_loss, losses
+
+
+def lvae_lin_loss(target,
+                  output,
+                  lin_z_hat,
+                  mm_z_hat,
+                  lin_mu,
+                  lin_var,
+                  mm_mu,
+                  igls_vars=None,
+                  beta=1,
+                  gamma=1,
+                  bse=True,
+                  kl=True,
+                  align=True):
+    """
+    This function calculates the loss for the longitudinal VAE.
+    It consists of 3 components:
+        1) reproduction of input and output image,
+        2) KL divergence
+        3) alignment loss between z_ijk and z_hat (denoted as z_prior and z_post).
+
+    Along with the total loss value, a list is returned for the losses of each of the individual losses.
+    If these losses are not included then they will be returned as 0's. The losses are returned as
+    [total loss, reconstruction loss, kl loss, align loss].
+
+    :param target: The ground truth input image.
+    :param output: The image output from the model.
+    :param lin_z_hat: lin_z_hat is the output from sampling from a normal distribution from mu and sigma from
+        linear layers.
+    :param mm_z_hat: This is the output from the IGLS model.
+    :param mu: The mean of z_ijk.
+    :param igls_vars: a matrix of ([sig_a0, sig_a1, sig_e], k_dims)
+    :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
+    :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
+    :param bse: If True then implement the reproduction loss.
+    :param kl: If True then implement the KL diverge loss.
+    :param align: If true then implement the alignment loss.
+    :return:
+    """
+
+    total_loss = 0
+    losses = [0] * 4
+    if bse:
+        reproduction_loss = F.mse_loss(target, output, reduction='mean')
+        bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
+        total_loss += bce_loss
+        losses[1] = bce_loss.item()
+
+    if kl:
+
+        # Convert the variations to diagonal matrices. Need to do this for each subject within the batch
+        batch_size = lin_mu.shape[0]
+        lin_cov_mat = empty((batch_size, lin_mu.shape[-1], lin_mu.shape[-1]))
+        for i in range(batch_size):
+            lin_cov_mat[i] = diag(lin_var[i])
+
+
+
+        a0_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[0]) - igls_vars[0])
+        a0_kl /= torch.numel(igls_vars[0])
+        a1_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[1]) - igls_vars[1])
+        a1_kl /= torch.numel(igls_vars[1])
+        e_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[2]) - igls_vars[2])
+        e_kl /= torch.numel(igls_vars[2])
+        kl_loss = (a0_kl + a1_kl + e_kl) / 3
+
+        total_loss += (beta * kl_loss)
+        losses[2] = (beta * kl_loss.item())
+        # raise Exception('Not implemented')
+
+    if align:
+        align_loss = F.mse_loss(lin_z_hat, mm_z_hat, reduction='mean')
         total_loss += (gamma * align_loss)
         losses[3] = (gamma * align_loss.item())
         # raise Exception('Not implemented')
@@ -173,8 +252,6 @@ def lvae_loss(target,
     losses[0] = total_loss.item()
 
     return total_loss, losses
-
-
 
 # def loss_fn(target,
 #             output,

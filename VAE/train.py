@@ -1,6 +1,7 @@
 import torch
-from torch import empty, diag
+from torch import bmm, inverse, log, det, exp
 import torch.nn.functional as F
+from VAE.utils import batch_diag
 
 
 def train_ae(n_epochs,
@@ -179,12 +180,12 @@ def lvae_lin_loss(target,
                   lin_z_hat,
                   mm_z_hat,
                   lin_mu,
-                  lin_var,
+                  lin_logvar,
                   mm_mu,
-                  igls_vars=None,
+                  mm_var,
                   beta=1,
                   gamma=1,
-                  bse=True,
+                  recon=True,
                   kl=True,
                   align=True):
     """
@@ -203,11 +204,13 @@ def lvae_lin_loss(target,
     :param lin_z_hat: lin_z_hat is the output from sampling from a normal distribution from mu and sigma from
         linear layers.
     :param mm_z_hat: This is the output from the IGLS model.
-    :param mu: The mean of z_ijk.
-    :param igls_vars: a matrix of ([sig_a0, sig_a1, sig_e], k_dims)
+    :param lin_mu: The mean from linear layer
+    :param lin_logvar: The log variance from the linear layer
+    :param mm_mu: The mean from mixed model (beta0 + beta1 * t).
+    :param mm_var: The variance form the mixed model.
     :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
     :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
-    :param bse: If True then implement the reproduction loss.
+    :param recon: If True then implement the reproduction loss.
     :param kl: If True then implement the KL diverge loss.
     :param align: If true then implement the alignment loss.
     :return:
@@ -215,7 +218,7 @@ def lvae_lin_loss(target,
 
     total_loss = 0
     losses = [0] * 4
-    if bse:
+    if recon:
         reproduction_loss = F.mse_loss(target, output, reduction='mean')
         bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
         total_loss += bce_loss
@@ -224,23 +227,35 @@ def lvae_lin_loss(target,
     if kl:
 
         # Convert the variations to diagonal matrices. Need to do this for each subject within the batch
-        batch_size = lin_mu.shape[0]
-        lin_cov_mat = empty((batch_size, lin_mu.shape[-1], lin_mu.shape[-1]))
-        for i in range(batch_size):
-            lin_cov_mat[i] = diag(lin_var[i])
+        lin_cov_mat = batch_diag(exp(lin_logvar)).double()
+        lin_cov_mat = lin_cov_mat.to(lin_logvar.device)
+        mm_cov_mat = batch_diag(mm_var).double()
+        mm_cov_mat = mm_cov_mat.to(lin_logvar.device)
+        mm_mu = mm_mu.unsqueeze(-1)
+        lin_mu = lin_mu.unsqueeze(-1)
 
+        mm_cov_mat_inv = inverse(mm_cov_mat)
 
+        kl0 = (bmm(mm_cov_mat_inv, lin_cov_mat)).diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+        # print('kl0', kl0.shape)
+        mu_diff = mm_mu - lin_mu
+        # print('mu_diff', mu_diff)
+        mu_diff_t = mu_diff.transpose(2, 1)
+        # print('mu_diff.t', mu_diff_t.shape)
+        kl1 = bmm(mu_diff_t, mm_cov_mat_inv.float())
+        # print('kl1', kl1)
+        kl1_1 = bmm(kl1, mu_diff).squeeze(-1).squeeze(-1)
+        # print('kl1_1', kl1_1)
+        kl2 = log(det(mm_cov_mat) / det(lin_cov_mat))
+        kl2 = kl2.float()
+        # print('kl2', kl2)
+        kl_tot = 0.5 * (kl0 - lin_logvar.shape[0] + kl1_1 + kl2)
+        # print('kl_tot', kl_tot)
+        kl_tot = beta * kl_tot.mean()
+        total_loss += kl_tot
+        losses[2] += kl_tot.item()
+        # print('kl_tot', kl_tot)
 
-        a0_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[0]) - igls_vars[0])
-        a0_kl /= torch.numel(igls_vars[0])
-        a1_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[1]) - igls_vars[1])
-        a1_kl /= torch.numel(igls_vars[1])
-        e_kl = -0.5 * torch.sum(1 + torch.log(igls_vars[2]) - igls_vars[2])
-        e_kl /= torch.numel(igls_vars[2])
-        kl_loss = (a0_kl + a1_kl + e_kl) / 3
-
-        total_loss += (beta * kl_loss)
-        losses[2] = (beta * kl_loss.item())
         # raise Exception('Not implemented')
 
     if align:

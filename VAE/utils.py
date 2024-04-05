@@ -1,3 +1,4 @@
+import torch
 def ask_dims(image):
     """
     Given an image, this functions asks you to specify the dimensions you would like to plot.
@@ -66,3 +67,16 @@ def get_args(path):
 
 def list_to_str(the_list):
     return ' '.join(map(str, the_list))
+
+
+def batch_diag(tensor):
+    """
+    Takes a matrix of size (batch, n), iterates through the batches creating diagonals from each (1, n) matrix.
+    The output is of size (batch, n, n).
+    :param tensor:
+    :return:
+    """
+    diag_mat = torch.empty((tensor.shape[0], tensor.shape[-1], tensor.shape[-1]))
+    for i in range(tensor.shape[0]):
+        diag_mat[i] = torch.diag(tensor[i])
+    return diag_mat

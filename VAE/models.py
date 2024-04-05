@@ -499,12 +499,13 @@ class LVAE_LIN(Module):
         self.linear_var = Linear(z_dim, z_dim)
         self.linear_mu = Linear(z_dim, z_dim)
         self.delta = 1
+        self.mixed_model = True
 
     def forward(self, x, subject_ids, times):
 
-        # print('\nx.shape', x.shape)
-        # print('subject_ids.shape', subject_ids.shape)
-        # print('times.shape', times.shape)
+        print('\nx.shape', x.shape)
+        print('subject_ids.shape', subject_ids.shape)
+        print('times.shape', times.shape)
 
         self.device = x.device
         self.batch_size = x.shape[0]
@@ -515,45 +516,53 @@ class LVAE_LIN(Module):
         # print('z_ijk.shape', z_ijk.shape)
 
         lin_mu = self.linear_mu(z_ijk)
-        # print('mu.shape', mu.shape)
-        lin_var = self.linear_var(z_ijk)
-        print('log_var.shape', lin_var.shape)
-        lin_z_hat = self.reparameterise(lin_mu, lin_var)
+        # print('mu.shape\n', lin_mu)
+        lin_logvar = self.linear_var(z_ijk)
+        # print('log_var.shape\n', lin_logvar)
+        lin_z_hat = self.reparameterise(lin_mu, lin_logvar)
+        # print('lin_z_hat\n', lin_z_hat)
+        # print(lin_z_hat)
         # print('lin_z_hat.shape', lin_z_hat.shape)
         x = self.decoder(lin_z_hat)
-        # print('x.shape', x.shape)
+        print('x\n', x)
+        print('x.shape', x.shape)
 
-        cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
-        print('cov_mat', cov_mat.shape)
-        print('betahat', betahat.shape)
-        print('sig_randeffs', sig_randeffs.shape)
-        print('sig_errs', sig_errs.shape)
+        if self.mixed_model:
+            cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+            # print('cov_mat', cov_mat.shape)
+            # print('betahat', betahat.shape)
+            # print('sig_randeffs', sig_randeffs.shape)
+            # print('sig_errs', sig_errs.shape)
 
-        mm_mu = betahat[:, 0] + (betahat[:, 1] * times)
-        # print('mu.shape', mu.shape)
+            mm_mu = (betahat[:, 0] + (betahat[:, 1] * times)).T
+            # print('mu.shape', mu.shape)
 
-        a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs, subject_ids)
-        mm_z_hat = mm_mu.T + a0 + a1 + e
-        print('z_hat.shape', mm_z_hat.shape)
-        print('a0.shape', a0.shape)
-        print('a1.shape', a1.shape)
-        print('e.shape', e.shape)
+            a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs, subject_ids)
+            mm_z_hat = mm_mu + a0 + a1 + e
+            # print('z_hat.shape', mm_z_hat.shape)
+            # print('a0.shape', a0.shape)
+            # print('a1.shape', a1.shape)
+            # print('e.shape', e.shape)
 
-        sig_a0s = sig_randeffs[:, 0, 0].repeat(self.batch_size, 1)
-        sig_a1s = sig_randeffs[:, 1, 1].repeat(self.batch_size, 1)
-        sig_errs = sig_errs.repeat(self.batch_size, 1)
-        times = times.view(-1, 1)
+            sig_a0s = sig_randeffs[:, 0, 0].repeat(self.batch_size, 1)
+            sig_a1s = sig_randeffs[:, 1, 1].repeat(self.batch_size, 1)
+            sig_errs = sig_errs.repeat(self.batch_size, 1)
+            times = times.view(-1, 1)
 
-        print('sig_a0s', sig_a0s.shape)
-        print('sig_a1s', sig_a1s.shape)
-        print('sig_errs', sig_errs.shape)
-        print('times', times.shape)
+            # print('sig_a0s', sig_a0s)
+            # print('si         g_a1s', sig_a1s)
+            # print('sig_errs', sig_errs)
+            # print('times', times.shape)
 
-        mm_var = sig_a0s + (sig_a1s * pow(times, 2)) + sig_errs
+            mm_var = sig_a0s + (sig_a1s * pow(times, 2)) + sig_errs
 
-        print('mm_var', mm_var.shape)
 
-        return x, lin_z_hat, lin_mu, lin_var, mm_z_hat, mm_mu, mm_var
+            # print('mm_var', mm_var.shape)
+
+            return x, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var
+
+        else:
+            return x, lin_z_hat, lin_mu, lin_logvar, None, None, None
 
     def igls_estimator(self, z_ijk, subject_ids, times):
 
@@ -682,8 +691,8 @@ class LVAE_LIN(Module):
 
 
     @staticmethod
-    def reparameterise(mu, var):
-        std = torch.sqrt(var)
+    def reparameterise(mu, log_var):
+        std = exp(0.5 * log_var)
         e = randn_like(std)
         return mu + (std * e)
 
@@ -694,8 +703,8 @@ class LVAE_LIN(Module):
         s_a1 = sig_rand_effs[:, 1, 1]
         # print('s_a0', s_a0)
 
-        print('s_a0', s_a0.shape, s_a0.device)
-        print('s_a1', s_a1.shape, s_a1.device)
+        # print('s_a0', s_a0.shape, s_a0.device)
+        # print('s_a1', s_a1.shape, s_a1.device)
 
         a0 = empty(self.batch_size, self.k_dims).to(self.device)
         a1 = empty(self.batch_size, self.k_dims).to(self.device)

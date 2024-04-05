@@ -100,7 +100,7 @@ else:
     dataloader = DataLoader(dataset=loaded_data,
                             num_workers=0,
                             batch_size=batch_size,
-                            shuffle=True)
+                            shuffle=shuffle_batches)
 
 
 print(f'Loaded data: \n\tTotal data points {len(dataloader.dataset)}, '
@@ -156,30 +156,31 @@ optimizer = torch.optim.SGD(list(model.parameters()),
 if delta is not None:
     model.delta = delta
 
-if mixed_model:
-    model.mixed_model = mixed_model
+
+model.mixed_model = mixed_model
 
 if igls_iterations is not None:
     model.igls_iterations = igls_iterations
 
+
 # # ----------------------------------------- dev test ----------------------------------------------------
-#
-# batch = next(iter(dataloader))
-# imgs = batch[0].to(device)
-# subj_ids = batch[1].to(device)
-# times = batch[2].to(device)
-# pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
-#
-# loss = lvae_lin_loss(target=imgs,
-#                      output=pred,
-#                      lin_z_hat=lin_z_hat,
-#                      mm_z_hat=mm_z_hat,
-#                      lin_mu=lin_mu,
-#                      lin_logvar=lin_logvar,
-#                      mm_mu=mm_mu,
-#                      mm_var=mm_var,
-#                      align=False
-#                      )
+
+batch = next(iter(dataloader))
+imgs = batch[0].to(device)
+subj_ids = batch[1].to(device)
+times = batch[2].to(device)
+pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
+
+loss = lvae_lin_loss(target=imgs,
+                     output=pred,
+                     lin_z_hat=lin_z_hat,
+                     mm_z_hat=mm_z_hat,
+                     lin_mu=lin_mu,
+                     lin_logvar=lin_logvar,
+                     mm_mu=mm_mu,
+                     mm_var=mm_var,
+                     align=False
+                     )
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 
@@ -195,13 +196,13 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         imgs = batch[0].to(device)
         subj_ids = batch[1].to(device)
         times = batch[2].to(device)
-        print(f'No. unique patients {subj_ids.unique().shape}')
-        print('Attached to devices')
+        # print(f'No. unique patients {subj_ids.unique().shape}')
+        # print('Attached to devices')
 
         optimizer.zero_grad()
-        print('Zerod optimizer')
+        # print('Zerod optimizer')
         pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
-        print('Passed through model')
+        # print('Passed through model')
 
         loss, each_loss = lvae_lin_loss(target=imgs,
                                         output=pred,
@@ -217,13 +218,13 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
                                         kl=kl_loss,
                                         align=align_loss
                                         )
-        print(loss, each_loss)
+        # print(loss, each_loss)
 
-        print('got loss value', each_loss)
+        # print('got loss value', each_loss)
         loss.backward(retain_graph=True)
-        print('done loss.backward()')
+        # print('done loss.backward()')
         optimizer.step()
-        print('stepped optimizer')
+        # print('stepped optimizer')
         epoch_losses.append(each_loss)
     # print(epoch_losses)
     epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
@@ -253,3 +254,8 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
 
 print('Done')
+
+
+# from VAE.plotting import plot_loss
+#
+# plot_loss(np.asarray(losses)[:, 0])

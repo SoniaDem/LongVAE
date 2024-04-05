@@ -503,9 +503,9 @@ class LVAE_LIN(Module):
 
     def forward(self, x, subject_ids, times):
 
-        print('\nx.shape', x.shape)
-        print('subject_ids.shape', subject_ids.shape)
-        print('times.shape', times.shape)
+        # print('\nx.shape', x.shape)
+        # print('subject_ids.shape', subject_ids.shape)
+        # print('times.shape', times.shape)
 
         self.device = x.device
         self.batch_size = x.shape[0]
@@ -524,8 +524,9 @@ class LVAE_LIN(Module):
         # print(lin_z_hat)
         # print('lin_z_hat.shape', lin_z_hat.shape)
         x = self.decoder(lin_z_hat)
-        print('x\n', x)
-        print('x.shape', x.shape)
+        # print('x\n', x)
+        # print('x.shape', x.shape)
+
 
         if self.mixed_model:
             cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)

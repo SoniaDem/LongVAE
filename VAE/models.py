@@ -517,7 +517,7 @@ class LVAE_LIN(Module):
         lin_mu = self.linear_mu(z_ijk)
         # print('mu.shape', mu.shape)
         lin_var = self.linear_var(z_ijk)
-        # print('log_var.shape', log_var.shape)
+        print('log_var.shape', lin_var.shape)
         lin_z_hat = self.reparameterise(lin_mu, lin_var)
         # print('lin_z_hat.shape', lin_z_hat.shape)
         x = self.decoder(lin_z_hat)
@@ -539,13 +539,19 @@ class LVAE_LIN(Module):
         print('a1.shape', a1.shape)
         print('e.shape', e.shape)
 
-        # igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
-        #                        sig_randeffs[:, 1, 1].expand(1, -1),
-        #                        sig_errs.expand(1, -1)], axis=0)
+        sig_a0s = sig_randeffs[:, 0, 0].repeat(self.batch_size, 1)
+        sig_a1s = sig_randeffs[:, 1, 1].repeat(self.batch_size, 1)
+        sig_errs = sig_errs.repeat(self.batch_size, 1)
+        times = times.view(-1, 1)
 
-        mm_var = sig_randeffs[:, 0, 0] + (sig_randeffs[:, 1, 1] * pow(times, 2)) + sig_errs
+        print('sig_a0s', sig_a0s.shape)
+        print('sig_a1s', sig_a1s.shape)
+        print('sig_errs', sig_errs.shape)
+        print('times', times.shape)
 
-        # print('igls_vars', igls_vars.shape)
+        mm_var = sig_a0s + (sig_a1s * pow(times, 2)) + sig_errs
+
+        print('mm_var', mm_var.shape)
 
         return x, lin_z_hat, lin_mu, lin_var, mm_z_hat, mm_mu, mm_var
 
@@ -702,19 +708,6 @@ class LVAE_LIN(Module):
             a1[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a1).sample([1])
 
         e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
-
-        print('\tsubject ids')
-        print(subject_ids)
-        print('')
-        print('\ta0')
-        print(a0[:, 0])
-
-        # a0 = Normal(mean_zeros, s_a0).sample([self.batch_size])
-        # print('a0', a0.shape, a0.device)
-        # a1 = Normal(mean_zeros, s_a1).sample([self.batch_size])
-        # # print('a1', a1.shape, s_a1.device)
-        # e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
-        # # print('e', e.shape, e.device)
 
         return a0, a1, e
 

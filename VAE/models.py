@@ -685,7 +685,7 @@ class LVAE_LIN(Module):
             sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
 
         # print('igls sig_rand_eff', sig_rand_eff.shape)
-        # print('igls sig_e', sig_errs.shape)
+        # print('igls sig_rand_eff', sig_rand_eff)
 
 
         return sigma_update, betahat, sig_rand_eff, sig_errs

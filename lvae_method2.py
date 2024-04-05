@@ -163,24 +163,25 @@ if igls_iterations is not None:
     model.igls_iterations = igls_iterations
 
 
-# # ----------------------------------------- dev test ----------------------------------------------------
+# ----------------------------------------- dev test ----------------------------------------------------
 
-batch = next(iter(dataloader))
-imgs = batch[0].to(device)
-subj_ids = batch[1].to(device)
-times = batch[2].to(device)
-pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
-
-loss = lvae_lin_loss(target=imgs,
-                     output=pred,
-                     lin_z_hat=lin_z_hat,
-                     mm_z_hat=mm_z_hat,
-                     lin_mu=lin_mu,
-                     lin_logvar=lin_logvar,
-                     mm_mu=mm_mu,
-                     mm_var=mm_var,
-                     align=False
-                     )
+# batch = next(iter(dataloader))
+# imgs = batch[0].to(device)
+# subj_ids = batch[1].to(device)
+# times = batch[2].to(device)
+# pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
+#
+# loss = lvae_lin_loss(target=imgs,
+#                      output=pred,
+#                      lin_z_hat=lin_z_hat,
+#                      mm_z_hat=mm_z_hat,
+#                      lin_mu=lin_mu,
+#                      lin_logvar=lin_logvar,
+#                      mm_mu=mm_mu,
+#                      mm_var=mm_var,
+#                      kl=True,
+#                      align=False
+#                      )
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 
@@ -220,7 +221,7 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
                                         )
         # print(loss, each_loss)
 
-        # print('got loss value', each_loss)
+        print('\tgot loss value', each_loss)
         loss.backward(retain_graph=True)
         # print('done loss.backward()')
         optimizer.step()

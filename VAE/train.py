@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import bmm, inverse, log, det, exp
 import torch.nn.functional as F
@@ -227,30 +228,30 @@ def lvae_lin_loss(target,
     if kl:
 
         # Convert the variations to diagonal matrices. Need to do this for each subject within the batch
-        lin_cov_mat = batch_diag(exp(lin_logvar)).double()
+        lin_cov_mat = batch_diag(exp(lin_logvar).T).double()  # (k, b, b)
         lin_cov_mat = lin_cov_mat.to(lin_logvar.device)
-        mm_cov_mat = batch_diag(mm_var).double()
-        mm_cov_mat = mm_cov_mat.to(lin_logvar.device)
-        mm_mu = mm_mu.unsqueeze(-1)
-        lin_mu = lin_mu.unsqueeze(-1)
+        mm_cov_mat = batch_diag(mm_var.T).double()  # (k, b, b)
+        mm_cov_mat = mm_cov_mat.to(mm_var.device)
+        mm_mu = mm_mu.T.unsqueeze(-1)  # (k, b, 1)
+        lin_mu = lin_mu.T.unsqueeze(-1)  # (k, b, 1)
 
-        mm_cov_mat_inv = inverse(mm_cov_mat)
+        mm_cov_mat_inv = inverse(mm_cov_mat)  # (k, b, b)
 
-        kl0 = (bmm(mm_cov_mat_inv, lin_cov_mat)).diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)
+        kl0 = (bmm(mm_cov_mat_inv, lin_cov_mat)).diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)  # (z)
         # print('kl0', kl0.shape)
-        mu_diff = mm_mu - lin_mu
-        # print('mu_diff', mu_diff)
-        mu_diff_t = mu_diff.transpose(2, 1)
+        mu_diff = mm_mu - lin_mu  # (k, b, 1)
+        # print('mu_diff', mu_diff.shape)
+        mu_diff_t = mu_diff.transpose(2, 1)  # (k, 1, b)
         # print('mu_diff.t', mu_diff_t.shape)
-        kl1 = bmm(mu_diff_t, mm_cov_mat_inv.float())
-        # print('kl1', kl1)
-        kl1_1 = bmm(kl1, mu_diff).squeeze(-1).squeeze(-1)
-        # print('kl1_1', kl1_1)
-        kl2 = log(det(mm_cov_mat) / det(lin_cov_mat))
+        kl1 = bmm(mu_diff_t, mm_cov_mat_inv.float())  # (k, 1, b)
+        # print('kl1', kl1.shape)
+        kl1_1 = bmm(kl1, mu_diff).squeeze(-1).squeeze(-1)  # (k)
+        # print('kl1_1', kl1_1.shape)
+        kl2 = log(det(mm_cov_mat) / det(lin_cov_mat))  # (k)
         kl2 = kl2.float()
-        # print('kl2', kl2)
-        kl_tot = 0.5 * (kl0 - lin_logvar.shape[0] + kl1_1 + kl2)
-        # print('kl_tot', kl_tot)
+        # print('kl2', kl2.shape)
+        kl_tot = 0.5 * (kl0 - lin_logvar.shape[0] + kl1_1 + kl2)  # (64)
+        # print('kl_tot', kl_tot.shape)
         kl_tot = beta * kl_tot.mean()
         total_loss += kl_tot
         losses[2] += kl_tot.item()
@@ -268,59 +269,15 @@ def lvae_lin_loss(target,
 
     return total_loss, losses
 
-# def loss_fn(target,
-#             output,
-#             mean,
-#             log_var,
-#             beta=5):
-#
-#     # reproduction_loss = F.binary_cross_entropy(target, output, reduction='sum')
-#     reproduction_loss = F.mse_loss(target, output, reduction='sum')
-#     bce = torch.sum(0.5 * reproduction_loss)
-#     kld = -0.5 * torch.sum(1 + log_var - (mean ** 2) - torch.exp(log_var))
-#     kld /= torch.numel(mean.data)
-#     loss = (beta * torch.sum(kld)) + torch.sum(bce)
-#     return loss
-#
-#
-# def train3d(n_epochs,
-#             model,
-#             dataloader,
-#             optimizer,
-#             device,
-#             ):
-#     """
-#     This function is used as a simple training loop given the data,
-#     a set of criteria and the number of epochs.
-#     :param n_epochs: The number of epochs to train for.
-#     :type n_epochs: positive int
-#     :param model: The torch model to be trained.
-#     :type model: torch.model
-#     :param dataloader: The dataloader containing the data to train on.
-#     :type dataloader: torch.data.DataLoader
-#     :param optimizer: The optimizer used for backpropagation.
-#     :type optimizer: torch.optim
-#     :param device: The device that the model is on.
-#     :type device: torch.device
-#     :return:
-#     """
-#
-#     model.train()
-#     losses = []
-#     for epoch in range(1, n_epochs + 1):
-#         train_loss = 0
-#         for batch in dataloader:
-#             optimizer.zero_grad()
-#             batch = batch.to(device).type(torch.cuda.FloatTensor)
-#             y_pred, mean, log_var = model(batch)
-#             loss = loss_fn(batch, y_pred, mean, log_var)
-#             # print(loss.item())
-#             train_loss += loss.item()
-#             loss.backward(inputs=list(model.parameters()), retain_graph=True)
-#             optimizer.step()
-#
-#         train_loss = train_loss / len(dataloader)
-#         losses.append(train_loss)
-#         print('Epoch: {}\tTraining Loss: {:.6f}'.format(epoch, train_loss))
-#     return losses
+
+def loss_txt_to_array(path):
+    """
+    The loss txt file has one line which is structured as:
+        total_loss\trecon_loss\tkl_loss\talign_loss\n
+    :param path:
+    :return:
+    """
+    loss_lines = [l.strip('\n') for l in open(path, 'r')]
+    loss_lines = [list(map(float, l.split(' '))) for l in loss_lines]
+    return np.asarray(loss_lines).T
 

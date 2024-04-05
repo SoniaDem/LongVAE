@@ -1,6 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
+from VAE.train import loss_txt_to_array
 
 
 def plotting_predictions(model,
@@ -156,3 +157,49 @@ def plot_predictions_slices(x,
     plt.title('Prediction')
 
     plt.show()
+
+
+def plot_losses(losses,
+                save=None):
+    """
+    Either receive the loss path or an array of losses.
+    The array should be formatted as (epochs, 4)
+    4 = total loss, recon loss, kl loss and align loss.
+    :param losses:
+    :param save:
+    :return:
+    """
+
+    losses = loss_txt_to_array(losses) if type(losses) == str else losses
+    epochs = list(range(losses.shape[1]))
+
+    plt.figure(figsize=(10, 10))
+
+    plt.subplot(2, 2, 1)
+    plt.plot(epochs, losses[0, :], color='tab:red')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Total Loss', weight='bold')
+
+    plt.subplot(2, 2, 2)
+    plt.plot(epochs, losses[1, :], color='tab:blue')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Reconstruction Loss', weight='bold')
+
+    plt.subplot(2, 2, 3)
+    plt.plot(epochs, losses[2, :], color='tab:orange')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('KL Divergence Loss', weight='bold')
+
+    plt.subplot(2, 2, 4)
+    plt.plot(epochs, losses[3, :], color='tab:green')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Alignment Loss', weight='bold')
+
+    plt.tight_layout()
+    plt.show()
+
+

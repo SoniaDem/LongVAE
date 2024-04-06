@@ -246,7 +246,7 @@ class VAE_IGLS(Module):
         self.k_dims = z_dim
         self.reset_sig_est = True
         self.lvae = True
-        self.estimate_with_igls = True
+        self.mixed_model = True
         self.linear_log_var = Linear(2560, z_dim)
         self.linear_mu = Linear(2560, z_dim)
         self.delta = 1
@@ -266,7 +266,7 @@ class VAE_IGLS(Module):
             z_ijk = self.linear_z_ijk(encoded_x)
             # print('z_ijk.shape', z_ijk.shape)
 
-            if self.estimate_with_igls:
+            if self.mixed_model:
                 cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
                 # print('cov_mat', cov_mat.shape)
                 # print('betahat', betahat.shape)
@@ -277,7 +277,7 @@ class VAE_IGLS(Module):
                 # print('mu.shape', mu.shape)
 
                 # z_hat = self.igls_reparameterise_mulvar(mu, cov_mat).squeeze(0).T
-                a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs)
+                a0, a1, e = self.igls_reparameterise(sig_randeffs, sig_errs, subject_ids)
                 z_hat = mu.T + a0 + a1 + e
                 # print('z_hat.shape', z_hat.shape)
                 # print('a0.shape', a0.shape)
@@ -393,6 +393,13 @@ class VAE_IGLS(Module):
             # print(torch.det(sigma_update))
             inv_sig_up = inverse(sigma_update).float()
             sigma_update = sigma_update.float()
+
+            for b in range(self.k_dims):
+                sig_diag = sigma_update[b].diag()
+                sig_zeros = torch.where(sig_diag == 0)
+                if len(sig_zeros[0]) != 0:
+                    sigma_update[sig_zeros[0], sig_zeros[0]] = 1e-6
+
             # print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
             # print(inv_sig_up)
             # print('xxt', xx.transpose(2, 1).shape, xx.device)
@@ -430,10 +437,7 @@ class VAE_IGLS(Module):
 
         # print('igls sig_rand_eff', sig_rand_eff.shape)
         # print('igls sig_e', sig_errs.shape)
-
-
         return sigma_update, betahat, sig_rand_eff, sig_errs
-
 
     @staticmethod
     def reparameterise(mu, log_var):
@@ -441,8 +445,7 @@ class VAE_IGLS(Module):
         e = randn_like(std)
         return mu + (std * e)
 
-
-    def igls_reparameterise(self, sig_rand_effs, sig_errs):
+    def igls_reparameterise(self, sig_rand_effs, sig_errs, subject_ids):
 
         s_a0 = sig_rand_effs[:, 0, 0]
         s_a1 = sig_rand_effs[:, 1, 1]
@@ -451,14 +454,17 @@ class VAE_IGLS(Module):
         # print('s_a0', s_a0.shape, s_a0.device)
         # print('s_a1', s_a1.shape, s_a1.device)
 
+        a0 = empty(self.batch_size, self.k_dims).to(self.device)
+        a1 = empty(self.batch_size, self.k_dims).to(self.device)
+
         mean_zeros = zeros_like(s_a0)
 
-        a0 = Normal(mean_zeros, s_a0).sample([self.batch_size])
-        # print('a0', a0.shape, a0.device)
-        a1 = Normal(mean_zeros, s_a1).sample([self.batch_size])
-        # print('a1', a1.shape, s_a1.device)
+        unique_ids = torch.unique(subject_ids)
+        for subj_id in unique_ids:
+            a0[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a0).sample([1])
+            a1[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a1).sample([1])
+
         e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
-        # print('e', e.shape, e.device)
 
         return a0, a1, e
 
@@ -526,7 +532,6 @@ class LVAE_LIN(Module):
         x = self.decoder(lin_z_hat)
         # print('x\n', x)
         # print('x.shape', x.shape)
-
 
         if self.mixed_model:
             cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
@@ -696,7 +701,6 @@ class LVAE_LIN(Module):
         std = exp(0.5 * log_var)
         e = randn_like(std)
         return mu + (std * e)
-
 
     def igls_reparameterise(self, sig_rand_effs, sig_errs, subject_ids):
 

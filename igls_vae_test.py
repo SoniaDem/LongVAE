@@ -21,7 +21,8 @@ from VAE.utils import get_args, list_to_str
 # ----------------------------------------- Load parameters ----------------------------------------------------
 
 # First get the parameters from the text file.
-param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_test_params.txt'
+# param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_test_params.txt'
+param_path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_test_params.txt'  # this is the director on Joe's PC.
 # param_path = sys.argv[1]  # Use this if running the code externally.
 params = get_args(param_path)  # This will return a dictionary of parameters that are stored.
 
@@ -37,7 +38,6 @@ if not os.path.isdir(project_dir):
 project_files = os.listdir(project_dir)
 h_flip = 0. if "H_FLIP" not in params.keys() else float(params["H_FLIP"])
 v_flip = 0. if "V_FLIP" not in params.keys() else float(params["V_FLIP"])
-rand_rot = 0. if "RAND_ROTATE" not in params.keys() else float(params["RAND_ROTATE"])
 batch_size = int(params["BATCH_SIZE"])
 shuffle_batches = True if params['SHUFFLE_BATCHES'].lower() == 'true' else False
 epochs = int(params["EPOCHS"])
@@ -52,6 +52,9 @@ momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9
 delta = None if "DELTA" not in params.keys() else float(params["DELTA"])
 sampler_params = [3, 6] if 'SAMPLER_PARAMS' not in params.keys() else params['SAMPLER_PARAMS']
 use_sampler = True if 'USE_SAMPLER' not in params.keys() or params["USE_SAMPLER"].lower() == 'true' else False
+train_with_igls = True if 'ESTIMATE_IGLS' in params.keys() and params["USE_SAMPLER"].lower() == 'true' else False
+mixed_model = True if 'MIXED_MODEL' in params.keys() and params['MIXED_MODEL'].lower() == 'true' else False
+igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -65,11 +68,9 @@ subject_key = pd.read_csv(os.path.join(os.getcwd(), 'subject_id_key.csv'))
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f'Device = {device}')
 
-
 transforms = a.Compose([
     a.HorizontalFlip(p=h_flip),
-    a.VerticalFlip(p=v_flip),
-    a.RandomRotate90(p=rand_rot),
+    a.VerticalFlip(p=v_flip)
 ])
 
 loaded_data = LongDataset(image_list=paths,
@@ -91,7 +92,6 @@ else:
                             num_workers=0,
                             batch_size=batch_size,
                             shuffle=True)
-
 
 print(f'Loaded data: \n\tTotal data points {len(dataloader.dataset)}, '
       f'\n\tBatches {len(dataloader)}, '
@@ -124,6 +124,7 @@ if os.path.isdir(model_dir) and len(os.listdir(model_dir)) > 0:
     model_epochs = [int(m.split('_')[-1].replace('.h5', '')) for m in model_list]
     pre_epochs = max(model_epochs)
     model_name = model_list[model_epochs.index(pre_epochs)]
+    print(f'Model name: {model_name}')
     try:
         model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
         print('Matched model keys successfully.')
@@ -147,7 +148,10 @@ optimizer = torch.optim.SGD(list(model.parameters()),
 if delta is not None:
     model.delta = delta
 
-model.estimate_with_igls = True if kl_loss else False
+model.mixed_model = mixed_model
+
+if igls_iterations is not None:
+    model.igls_iterations = igls_iterations
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 
@@ -157,7 +161,6 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
     epoch_losses = []
     for batch_no, batch in enumerate(dataloader):
-
         print(f'\tEpoch [{epoch + 1} / {pre_epochs + epochs}]  -  Batch [{batch_no + 1} / {len(dataloader)}]')
 
         imgs = batch[0].to(device)
@@ -170,7 +173,6 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
         # print('Zerod optimizer')
         pred, z_prior, z_post, cov_mat, mu, betahat, igls_vars = model(imgs, subj_ids, times)
         # print('Passed through model')
-
 
         loss, each_loss = lvae_loss(target=imgs,
                                     output=pred,
@@ -198,8 +200,8 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
     losses.append(epoch_losses)
 
     # Save the model and the losses to the file if the correct epoch
-    if (epoch+1) % save_epochs == 0:
-        torch.save(model.state_dict(), os.path.join(model_dir, f'{name}_{epoch+1}.h5'))
+    if (epoch + 1) % save_epochs == 0:
+        torch.save(model.state_dict(), os.path.join(model_dir, f'{name}_{epoch + 1}.h5'))
         print(f'Saved {name}_{epoch}.h5')
 
         loss_file = open(os.path.join(project_dir, loss_filename), 'a+')
@@ -218,20 +220,21 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
     model.zero_grad(set_to_none=True)
     torch.cuda.empty_cache()
 
-
 print('Done')
 
 
-from VAE.plotting import plot_loss
-
-losses_txt = [l.strip('\n') for l in open(os.path.join(project_dir, loss_filename), 'r')]
-losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
-plot_loss(losses_txt[10:])
-
-plot_loss(np.asarray(losses)[:-2, 3])
 
 
-test_imgs, test_ids, test_times = next(iter(dataloader))
+#
+# from VAE.plotting import plot_loss
+#
+# losses_txt = [l.strip('\n') for l in open(os.path.join(project_dir, loss_filename), 'r')]
+# losses_txt = [float(l.split(' ')[0]) for l in losses_txt]
+# plot_loss(losses_txt[10:])
+#
+# plot_loss(np.asarray(losses)[:, 3])
+#
+# test_imgs, test_ids, test_times = next(iter(dataloader))
 #
 # test_imgs = test_imgs.to(device)
 # test_ids = test_ids.to(device)

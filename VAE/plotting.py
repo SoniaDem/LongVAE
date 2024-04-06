@@ -9,6 +9,7 @@ def plotting_predictions(model,
                          device='cpu',
                          cmap='GnBu',
                          samples=1,
+                         size=8,
                          save=None):
     """
     This is a function for plotting the input image, passing it through the model,
@@ -24,6 +25,8 @@ def plotting_predictions(model,
     :type cmap: str
     :param samples: The number of images to pass through the model. (default :obj:`1`).
     :type samples: positive int
+    :param size: The output is square and this determines the size of that square.
+    :type size: int
     :param save: To save the figure, enter the path including the figure name.
     :type save: str
     :return:
@@ -32,7 +35,7 @@ def plotting_predictions(model,
     model = model.to(device)
     model.eval()
     counter = 0
-    plt.figure(figsize=(8, int(samples * 8)))
+    plt.figure(figsize=(size, int(samples * size)))
     for batch in dataloader:
         batch = batch.to(device)
         batch_pred, mean, log_var = model(batch)

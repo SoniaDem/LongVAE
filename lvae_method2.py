@@ -132,6 +132,7 @@ if os.path.isdir(model_dir) and len(os.listdir(model_dir)) > 0:
     model_epochs = [int(m.split('_')[-1].replace('.h5', '')) for m in model_list]
     pre_epochs = max(model_epochs)
     model_name = model_list[model_epochs.index(pre_epochs)]
+    print('Model name:', model_name)
     try:
         model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
         print('Matched model keys successfully.')

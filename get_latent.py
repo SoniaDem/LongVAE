@@ -37,8 +37,8 @@ if not os.path.isdir(project_dir):
     print(f'Made project {project_dir}')
 
 project_files = os.listdir(project_dir)
-h_flip = 0. if "H_FLIP" not in params.keys() else float(params["H_FLIP"])
-v_flip = 0. if "V_FLIP" not in params.keys() else float(params["V_FLIP"])
+h_flip = 0.
+v_flip = 0.
 batch_size = int(params["BATCH_SIZE"])
 shuffle_batches = True if params['SHUFFLE_BATCHES'].lower() == 'true' else False
 epochs = int(params["EPOCHS"])
@@ -130,11 +130,20 @@ model.eval()
 
 # ----------------------------------------- Get Latent Variables ----------------------------------------------------
 
-
-
-counter = 0
+n_samples = 0
 for batch_no, batch in enumerate(dataloader):
-    counter += batch[0].shape[0]
+    n_samples += batch[0].shape[0]
+
+all_preds = np.zeros((n_samples, 1, 56, 48, 48))
+all_lin_z_hats = np.zeros((n_samples, int(params["Z_DIM"])))
+all_lin_mus = np.zeros((n_samples, int(params["Z_DIM"])))
+all_lin_log_vars = np.zeros((n_samples, int(params["Z_DIM"])))
+all_mm_z_hats = np.zeros((n_samples, int(params["Z_DIM"])))
+all_mm_mus = np.zeros((n_samples, int(params["Z_DIM"])))
+all_mm_vars = np.zeros((n_samples, int(params["Z_DIM"])))
+
+for batch_no, batch in enumerate(dataloader):
+    print(f'Batch [{batch_no + 1} / {len(dataloader)}]')
 
     imgs = batch[0].to(device)
     subj_ids = batch[1].to(device)
@@ -142,10 +151,39 @@ for batch_no, batch in enumerate(dataloader):
 
     pred, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var = model(imgs, subj_ids, times)
 
-    print('pred', pred.shape)
-    print('lin_z_hat', lin_z_hat.shape)
-    print('lin_logvar', lin_logvar.shape)
-    print('mm_z_hat', mm_z_hat.shape)
-    print('mm_mu', mm_mu.shape)
-    print('mm_var', mm_var.shape)
-    break
+    batch_start = batch_no*batch_size
+    batch_end = (batch_no+1)*batch_size
+    all_preds[batch_start:batch_end, :, :, :, :] = pred.detach().cpu().numpy()
+    all_lin_z_hats[batch_start:batch_end, :] = lin_z_hat.detach().cpu().numpy()
+    all_lin_mus[batch_start:batch_end, :] = lin_mu.detach().cpu().numpy()
+    all_lin_log_vars[batch_start:batch_end, :] = lin_logvar.detach().cpu().numpy()
+    all_mm_mus[batch_start:batch_end, :] = mm_z_hat.detach().cpu().numpy()
+    all_mm_vars[batch_start:batch_end, :] = mm_var.detach().cpu().numpy()
+
+
+# ----------------------------------------- Save Latent Variables ----------------------------------------------------
+
+param_dir = os.path.join(project_dir, 'Latent Params')
+if not os.path.isdir(param_dir):
+    os.mkdir(param_dir)
+    print('Made directory', param_dir)
+
+all_lin_z_hats = pd.DataFrame(all_lin_z_hats)
+all_lin_z_hats.to_csv(os.path.join(param_dir, f'lin_z_hats_e{use_model_epoch}.csv'), index=False)
+print('Saved', os.path.join(param_dir, f'lin_z_hats_e{use_model_epoch}.csv'))
+
+all_lin_mus = pd.DataFrame(all_lin_mus)
+all_lin_mus.to_csv(os.path.join(param_dir, f'all_lin_mus_e{use_model_epoch}.csv'), index=False)
+print('Saved', os.path.join(param_dir, f'all_lin_mus_e{use_model_epoch}.csv'))
+
+all_lin_log_vars = pd.DataFrame(all_lin_log_vars)
+all_lin_log_vars.to_csv(os.path.join(param_dir, f'all_lin_log_vars_e{use_model_epoch}.csv'), index=False)
+print('Saved', os.path.join(param_dir, f'all_lin_log_vars_e{use_model_epoch}.csv'))
+
+all_mm_mus = pd.DataFrame(all_mm_mus)
+all_mm_mus.to_csv(os.path.join(param_dir, f'all_mm_mus_e{use_model_epoch}.csv'), index=False)
+print('Saved', os.path.join(param_dir, f'all_mm_mus_e{use_model_epoch}.csv'))
+
+all_mm_vars = pd.DataFrame(all_mm_vars)
+all_mm_vars.to_csv(os.path.join(param_dir, f'all_mm_vars_e{use_model_epoch}.csv'), index=False)
+print('Saved', os.path.join(param_dir, f'all_mm_vars_e{use_model_epoch}.csv'))

@@ -122,7 +122,7 @@ class BrainDataset3D(Dataset):
 
 
 class LongDataset(Dataset):
-    def __init__(self, image_list, subject_key, transformations):
+    def __init__(self, image_list, subject_key, transformations, min_data=None):
 
         self.image_list = image_list
         self.subject_key = subject_key
@@ -138,6 +138,11 @@ class LongDataset(Dataset):
                 self.subj_dict[subject_id_num] = [idx]
             else:
                 self.subj_dict[subject_id_num].append(idx)
+
+        if min_data is not None:
+            rm_subj = [k for k in self.subj_dict.keys() if len(self.subj_dict[k]) < min_data]
+            for k in rm_subj:
+                self.subj_dict.pop(k)
 
     def __len__(self):
         return len(self.image_list)
@@ -192,6 +197,7 @@ class SubjectBatchSampler(Sampler):
         self.batch_size = batch_size
         self.min_data = min_data
         self.max_data = max_data
+
 
     def __iter__(self):
         # implement logic for sampling here

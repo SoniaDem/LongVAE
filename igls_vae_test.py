@@ -21,8 +21,8 @@ from VAE.utils import get_args, list_to_str
 # ----------------------------------------- Load parameters ----------------------------------------------------
 
 # First get the parameters from the text file.
-# param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_test_params.txt'
-param_path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_test_params.txt'  # this is the director on Joe's PC.
+param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_noa01_params.txt' # this is the directory on Sonia's PC.
+# param_path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_noa01_params.txt'  # this is the directory on Joe's PC.
 # param_path = sys.argv[1]  # Use this if running the code externally.
 params = get_args(param_path)  # This will return a dictionary of parameters that are stored.
 
@@ -60,6 +60,8 @@ igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.
 save_latent = True if "SAVE_LATENT" in params.keys() and params["SAVE_LATENT"].lower() == 'true' else False
 latent_dir = os.path.join(project_dir, 'Latent Params')
 slope = True if "SLOPE" in params.keys() and params["SLOPE"].lower() == 'true' else False
+min_subj_t = None if "MIN_DATA" not in params.keys() else int(params["MIN_DATA"])
+include_a01 = True if "INLCUDE_A01" in params.keys() and params["INLCUDE_A01"].lower == 'true' else False
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -80,7 +82,8 @@ transforms = a.Compose([
 
 loaded_data = LongDataset(image_list=paths,
                           subject_key=subject_key,
-                          transformations=transforms)
+                          transformations=transforms,
+                          min_data=min_subj_t)
 
 if use_sampler:
     custom_sampler = SubjectBatchSampler(subject_dict=loaded_data.subj_dict,
@@ -162,6 +165,11 @@ if save_latent:
     model.save_latent = latent_dir
 
 model.slope = slope
+model.a01 = include_a01
+
+print('\tmodel.save_latent', model.save_latent)
+print('\tmodel.slope', model.slope)
+print('\tmodel.a01', model.a01)
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 

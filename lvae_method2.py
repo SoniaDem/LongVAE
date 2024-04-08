@@ -63,6 +63,7 @@ sampler_params = [3, 6] if 'SAMPLER_PARAMS' not in params.keys() else params['SA
 use_sampler = True if 'USE_SAMPLER' not in params.keys() or params["USE_SAMPLER"].lower() == 'true' else False
 mixed_model = True if 'MIXED_MODEL' in params.keys() and params['MIXED_MODEL'].lower() == 'true' else False
 igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
+min_subj_t = None if "MIN_DATA" not in params.keys() else int(params["MIN_DATA"])
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -84,7 +85,8 @@ transforms = a.Compose([
 
 loaded_data = LongDataset(image_list=paths,
                           subject_key=subject_key,
-                          transformations=transforms)
+                          transformations=transforms,
+                          min_data=min_subj_t)
 
 if use_sampler:
     custom_sampler = SubjectBatchSampler(subject_dict=loaded_data.subj_dict,

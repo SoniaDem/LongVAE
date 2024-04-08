@@ -9,6 +9,7 @@ from torch import sigmoid, exp, randn_like, tensor, repeat_interleave, \
     pow, empty
 from torch.nn.parameter import Parameter
 import torch
+import os
 
 from VAE.utils import expand_vec
 
@@ -250,6 +251,8 @@ class VAE_IGLS(Module):
         self.linear_log_var = Linear(2560, z_dim)
         self.linear_mu = Linear(2560, z_dim)
         self.delta = 1
+        self.save_latent = None
+        self.slope = True
 
     def forward(self, x, subject_ids, times):
 
@@ -265,6 +268,8 @@ class VAE_IGLS(Module):
         if self.lvae:
             z_ijk = self.linear_z_ijk(encoded_x)
             # print('z_ijk.shape', z_ijk.shape)
+            if self.save_latent is not None:
+                torch.save(z_ijk, os.path.join(self.save_latent, 'z_ijk.pt'))
 
             if self.mixed_model:
                 cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
@@ -377,8 +382,12 @@ class VAE_IGLS(Module):
             s_a1 = expand_vec(z4, sig_est[3])
             # print('igls idk')
 
-            # size (k_dims, batch_size, batch_size)
-            sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            if self.slope:
+                # size (k_dims, batch_size, batch_size)
+                sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            else:
+                sigma_update = (s_e * z1) + (s_a0 * z2)
+
             sigma_update = sigma_update.double()
             # print('igls sigma_update', sigma_update.shape)
             # if sigma_update.min() <= 0:
@@ -390,15 +399,18 @@ class VAE_IGLS(Module):
             # size (k_dims, 2, 2)
 
             ## --------------------------- The problem is here ---------------------------
+
+            # for b in range(self.k_dims):
+            #     sig_diag = sigma_update[b].diag()
+            #     sig_zeros = torch.where(sig_diag == 0)
+            #     if len(sig_zeros[0]) != 0:
+            #         sigma_update[sig_zeros[0], sig_zeros[0]] = 1e-6
+
             # print(torch.det(sigma_update))
             inv_sig_up = inverse(sigma_update).float()
             sigma_update = sigma_update.float()
 
-            for b in range(self.k_dims):
-                sig_diag = sigma_update[b].diag()
-                sig_zeros = torch.where(sig_diag == 0)
-                if len(sig_zeros[0]) != 0:
-                    sigma_update[sig_zeros[0], sig_zeros[0]] = 1e-6
+
 
             # print('inv sig up', inv_sig_up.shape, inv_sig_up.device)
             # print(inv_sig_up)

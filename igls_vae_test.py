@@ -34,6 +34,8 @@ project_dir = os.path.join(params["PROJECT_DIR"], name)
 if not os.path.isdir(project_dir):
     os.mkdir(project_dir)
     print(f'Made project {project_dir}')
+    os.mkdir(os.path.join(project_dir, 'Latent Params'))
+
 
 project_files = os.listdir(project_dir)
 h_flip = 0. if "H_FLIP" not in params.keys() else float(params["H_FLIP"])
@@ -55,6 +57,9 @@ use_sampler = True if 'USE_SAMPLER' not in params.keys() or params["USE_SAMPLER"
 train_with_igls = True if 'ESTIMATE_IGLS' in params.keys() and params["USE_SAMPLER"].lower() == 'true' else False
 mixed_model = True if 'MIXED_MODEL' in params.keys() and params['MIXED_MODEL'].lower() == 'true' else False
 igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
+save_latent = True if "SAVE_LATENT" in params.keys() and params["SAVE_LATENT"].lower() == 'true' else False
+latent_dir = os.path.join(project_dir, 'Latent Params')
+slope = True if "SLOPE" in params.keys() and params["SLOPE"].lower() == 'true' else False
 
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
@@ -152,6 +157,11 @@ model.mixed_model = mixed_model
 
 if igls_iterations is not None:
     model.igls_iterations = igls_iterations
+
+if save_latent:
+    model.save_latent = latent_dir
+
+model.slope = slope
 
 # ----------------------------------------- Train Model ----------------------------------------------------
 

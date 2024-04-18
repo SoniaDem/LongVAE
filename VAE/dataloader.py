@@ -198,7 +198,6 @@ class SubjectBatchSampler(Sampler):
         self.min_data = min_data
         self.max_data = max_data
 
-
     def __iter__(self):
         # implement logic for sampling here
 
@@ -231,5 +230,30 @@ class SubjectBatchSampler(Sampler):
         #     if len(batch) == self.batch_size
         #         yield batch
         #         batch = []
+    def __len__(self):
+        return len(self.subj_dict.keys())
+
+
+class SubjectPerBatchSampler(Sampler):
+    """
+    For this sampler each batch contains only the data from a single subject.
+    Subjects are not included if they have a specified minimum number of time points.
+
+    Args:
+        subject_dict: A dictionary containing {subject_id: [times]}
+        batch_size: size of mini-batch
+        min_data: Minimum number of data points for each unique subject.
+    """
+
+    def __init__(self, subject_dict, min_data=3):
+        # build data sampling here
+        self.subj_dict = subject_dict
+
+    def __iter__(self):
+
+        for subj in self.subj_dict.keys():
+            batch = self.subj_dict[subj]
+            yield batch
+
     def __len__(self):
         return len(self.subj_dict.keys())

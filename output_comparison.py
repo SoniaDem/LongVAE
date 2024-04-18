@@ -3,7 +3,7 @@
 This code is to load in data, pass it through a trained model and then view the reconstruction
 next to the ground truth.
 
-Joe/Sonia 07/03/2023
+Jonia 18/04/2024
 """
 # ----------------------------- Load Packages --------------------------------------- 0.
 
@@ -16,7 +16,7 @@ import torch
 from torch.utils.data import DataLoader
 import albumentations as a
 
-from VAE.dataloader import LongDataset
+from VAE.dataloader import LongDataset, SubjectPerBatchSampler
 from VAE.models import VAE_IGLS, LVAE_LIN
 from VAE.utils import get_args
 from VAE.plotting import plot_slice_prediction
@@ -38,6 +38,15 @@ version = int(params["VERSION"])
 axis = 0 if "AXIS" not in params else int(params["AXIS"])
 image_no = None if 'IMAGE_NO' not in params else int(params['IMAGE_NO'])
 
+mixed_model = True if 'MIXED_MODEL' in params.keys() and params['MIXED_MODEL'].lower() == 'true' else False
+use_sampler = True if mixed_model else False
+train_with_igls = True if mixed_model else False
+igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
+slope = True if "SLOPE" in params.keys() and params["SLOPE"].lower() == 'true' else False
+min_subj_t = None if "MIN_DATA" not in params.keys() else int(params["MIN_DATA"])
+include_a01 = True if "INLCUDE_A01" in params.keys() and params["INLCUDE_A01"].lower == 'true' else False
+sampler_params = [3, 6] if 'SAMPLER_PARAMS' not in params.keys() else params['SAMPLER_PARAMS']
+timepoint = 0 if "TIMEPOINT" not in params else int(params["TIMEPOINT"])
 print('Loaded parameters')
 # ----------------------------------------- Load data ----------------------------------------------------
 
@@ -60,10 +69,20 @@ loaded_data = LongDataset(image_list=paths,
                           transformations=transforms,
                           min_data=min_subj_t)
 
-dataloader = DataLoader(dataset=loaded_data,
-                        num_workers=0,
-                        batch_size=1,
-                        shuffle=False)
+if use_sampler:
+    custom_sampler = SubjectPerBatchSampler(subject_dict=loaded_data.subj_dict,
+                                            min_data=int(sampler_params[0]))
+
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_sampler=custom_sampler)
+
+else:
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_size=1,
+                            shuffle=False)
+
 
 print(f'Loaded data: \n\tTotal data points {len(dataloader.dataset)}, '
       f'\n\tBatches {len(dataloader)}, '
@@ -93,34 +112,69 @@ except NameError:
 model = model.to(device)
 
 model.mixed_model = False
+if igls_iterations is not None:
+    model.igls_iterations = igls_iterations
+model.slope = slope
+model.a01 = include_a01
+
+print('\tmodel.slope', model.slope)
+print('\tmodel.a01', model.a01)
 
 # ------------------------- Select Data and Pass Through Model ------------------------ 2.
 
 print('Getting subject and passing through model.')
 image_no = image_no if image_no is not None else torch.randint(0, len(paths), (1,)).item()
-
 data_iter = iter(dataloader)
-for i in range(len(paths)):
-    img, subj_id, time = next(data_iter)
-    if i == image_no:
-        break
 
-img = img.to(device)
-subj_id = subj_id.to(device)
-time = time.to(device)
+if mixed_model:
+    for i in range(len(loaded_data.subj_dict.keys())):
+        img, subj_id, time = next(data_iter)
+        if image_no in subj_id:
+            break
 
-model.eval()
-pred, _, _, _, _, _, _ = model(img, subj_id, time)
+        print(f'Subject {image_no}: {time.tolist()}')
 
-img = img.cpu() # shape (1, 1, 56, 48, 48)
-pred = pred.cpu().detach().numpy() # shape (1, 1, 56, 48, 48)
+        img = img.to(device)
+        subj_id = subj_id.to(device)
+        time = time.to(device)
 
-img = img.squeeze(0).squeeze(0)
-pred = pred.squeeze(0).squeeze(0)
+        model.eval()
+        pred, _, _, _, _, _, _ = model(img, subj_id, time)
 
-print('Plotting')
+        img = img.cpu()  # shape (batch, 1, 56, 48, 48)
+        pred = pred.cpu().detach().numpy()  # shape (batch, 1, 56, 48, 48)
 
-plot_slice_prediction(img, pred, axis=2, title=f'Subject ID {subj_id.item()}')
+        img = img[timepoint].squeeze(0)
+        pred = pred[timepoint].squeeze(0)
+
+        print('Plotting')
+
+        title = f'Subject ID {image_no}, Time {time[timepoint].item()}'
+        plot_slice_prediction(img, pred, axis=2, title=title)
+
+else:
+    for i in range(len(paths)):
+        img, subj_id, time = next(data_iter)
+        if i == image_no:
+            break
+
+    img = img.to(device)
+    subj_id = subj_id.to(device)
+    time = time.to(device)
+
+    model.eval()
+    pred, _, _, _, _, _, _ = model(img, subj_id, time)
+
+    img = img.cpu()  # shape (1, 1, 56, 48, 48)
+    pred = pred.cpu().detach().numpy()  # shape (1, 1, 56, 48, 48)
+
+    img = img.squeeze(0).squeeze(0)
+    pred = pred.squeeze(0).squeeze(0)
+
+    print('Plotting')
+
+    plot_slice_prediction(img, pred, axis=2, title=f'Subject ID {subj_id.item()}')
+
 
 
 

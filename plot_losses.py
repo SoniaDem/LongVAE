@@ -2,16 +2,19 @@ from VAE.plotting import plot_losses
 from VAE.train import loss_txt_to_array
 
 
-project_name = 'IGLS_noa01'
-path = f'D:\\ADNI_VAE\\Projects\\{project_name}\\{project_name}_loss.txt'
-# path = f'D:\\ADNI_VAE\\Projects\\IGLS_v1\\IGLS_zijk_no_slope_loss.txt'
+project_name = 'IGLS_zijk_no_slope'
+# path = f'D:\\ADNI_VAE\\Projects\\{project_name}\\{project_name}_loss.txt'
+path = f'D:\\Projects\\SoniaVAE\\Projects\\{project_name}\\{project_name}_loss.txt'
 
 loss_lines = [l.strip('\n') for l in open(path, 'r')]
 
 losses = loss_txt_to_array(path)
 
 plot_losses(losses[:, 3000:])
-plot_losses(losses)
+plot_losses(losses, 5)
+
+from torch import tensor
+import pandas as pd
 
 # --------------------------------------- unrelated stuff --------------------------------------------
 #

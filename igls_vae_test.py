@@ -21,8 +21,8 @@ from VAE.utils import get_args, list_to_str
 # ----------------------------------------- Load parameters ----------------------------------------------------
 
 # First get the parameters from the text file.
-param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_noa01_params.txt' # this is the directory on Sonia's PC.
-# param_path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_noa01_params.txt'  # this is the directory on Joe's PC.
+# param_path = 'D:\\ADNI_VAE\\ParamFiles\\IGLS_noa01_params.txt' # this is the directory on Sonia's PC.
+param_path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_test_params.txt'  # this is the directory on Joe's PC.
 # param_path = sys.argv[1]  # Use this if running the code externally.
 params = get_args(param_path)  # This will return a dictionary of parameters that are stored.
 

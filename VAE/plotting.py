@@ -162,6 +162,52 @@ def plot_predictions_slices(x,
     plt.show()
 
 
+def plot_slice_prediction(x, y, axis=0, title=None):
+    """
+    This method takes the axis as input for the 3 image. Then in that axis,
+    takes the middle slice and plots this slice from the input and output.
+
+    :param x:
+    :param y:
+    :param axis:
+    :param title:
+    :return:
+    """
+
+    # Get middle slice.
+    slice_id = int(x.shape[axis] / 2)
+
+    plt.figure(figsize=(6, 3.5))
+
+    plt.subplot(1, 2, 1)
+    if axis == 0:
+        plt.imshow(x[slice_id, :, :], cmap='Greys_r')
+    if axis == 1:
+        plt.imshow(x[:, slice_id, :], cmap='Greys_r')
+    if axis == 2:
+        plt.imshow(x[:, :, slice_id], cmap='Greys_r')
+    plt.axis('off')
+    plt.axis('equal')
+    plt.title('Ground Truth')
+
+    plt.subplot(1, 2, 2)
+    if axis == 0:
+        plt.imshow(y[slice_id, :, :], cmap='Greys_r')
+    if axis == 1:
+        plt.imshow(y[:, slice_id, :], cmap='Greys_r')
+    if axis == 2:
+        plt.imshow(y[:, :, slice_id], cmap='Greys_r')
+    plt.axis('off')
+    plt.axis('equal')
+    plt.title('Prediction')
+
+    if title is not None:
+        plt.suptitle(f'{title} - Axis {axis}, Slice {slice_id}', fontsize=15, weight='bold')
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_losses(losses,
                 save=None):
     """

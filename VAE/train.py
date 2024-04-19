@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from torch import bmm, inverse, log, det, exp
 import torch.nn.functional as F
 from VAE.utils import batch_diag
@@ -107,6 +108,12 @@ def loss_fn(target,
     return loss
 
 
+def d_loss(target,
+           output):
+    loss = nn.BCELoss(reduction='mean')
+    return loss(target, output)
+
+
 def lvae_loss(target,
               output,
               prior_z,
@@ -165,6 +172,72 @@ def lvae_loss(target,
 
         total_loss += (beta * kl_loss)
         losses[2] = (beta * kl_loss.item())
+
+    if align:
+        align_loss = F.mse_loss(prior_z, post_z, reduction='mean')
+        total_loss += (gamma * align_loss)
+        losses[3] = (gamma * align_loss.item())
+
+    losses[0] = total_loss.item()
+
+    return total_loss, losses
+
+
+def lvaegan_loss(target,
+                 output,
+                 d_output,
+                 d_labels,
+                 prior_z,
+                 post_z,
+                 mu,
+                 cov_mat,
+                 igls_vars=None,
+                 beta=1,
+                 gamma=1,
+                 bse=True,
+                 disc_loss=True,
+                 align=True):
+    """
+    This function calculates the loss for the longitudinal VAE.
+    It consists of 3 components:
+        1) reproduction of input and output image,
+        2) disciminator loss
+        3) alignment loss between z_ijk and z_hat (denoted as z_prior and z_post).
+
+    Along with the total loss value, a list is returned for the losses of each of the individual losses.
+    If these losses are not included then they will be returned as 0's. The losses are returned as
+    [total loss, reconstruction loss, kl loss, align loss].
+
+    :param target: The ground truth input image.
+    :param output: The image output from the model.
+    :param d_output: The image and reconstruction after being passed through the discriminator.
+    :param d_labels: The labels containing  0s and 1s for the discriminator.
+    :param prior_z: z_ijk which is output from the encoder and the linear layer.
+    :param post_z: z_hat which is following the IGLS estimation method and sampling of
+        the multivariate normal distribution.
+    :param cov_mat: The covariance of z_ijk.
+    :param mu: The mean of z_ijk.
+    :param igls_vars: a matrix of ([sig_a0, sig_a1, sig_e], k_dims)
+    :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
+    :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
+    :param bse: If True then implement the reproduction loss.
+    :param disc_loss: If True then implement the KL diverge loss.
+    :param align: If true then implement the alignment loss.
+    :return:
+    """
+
+    total_loss = 0
+    losses = [0] * 4
+    if bse:
+        reproduction_loss = F.mse_loss(target, output, reduction='mean')
+        bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
+        total_loss += bce_loss
+        losses[1] = bce_loss.item()
+
+    if disc_loss:
+        loss_d = d_loss(d_output, d_labels)
+        total_loss += (beta * loss_d)
+        losses[2] = (beta * loss_d.item())
 
     if align:
         align_loss = F.mse_loss(prior_z, post_z, reduction='mean')

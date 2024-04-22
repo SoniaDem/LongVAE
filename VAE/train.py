@@ -249,25 +249,30 @@ def lvaegan_loss(target,
     return total_loss, losses
 
 
-def lvae_lin_loss(target,
-                  output,
-                  lin_z_hat,
-                  mm_z_hat,
-                  lin_mu,
-                  lin_logvar,
-                  mm_mu,
-                  mm_var,
-                  beta=1,
-                  gamma=1,
-                  recon=True,
-                  kl=True,
-                  align=True):
+def lvaegan_lin_loss(target,
+                    output,
+                    lin_z_hat,
+                    mm_z_hat,
+                    lin_mu,
+                    lin_logvar,
+                    mm_mu,
+                    mm_var,
+                    d_output=None,
+                    d_labels=None,
+                    beta=1,
+                    gamma=1,
+                    nu=1,
+                    recon=True,
+                    kl=True,
+                    align=True,
+                    disc_loss=True):
     """
     This function calculates the loss for the longitudinal VAE.
-    It consists of 3 components:
+    It consists of 4 components:
         1) reproduction of input and output image,
-        2) KL divergence
-        3) alignment loss between z_ijk and z_hat (denoted as z_prior and z_post).
+        2) KL divergence,
+        3) alignment loss between z_ijk and z_hat (denoted as z_prior and z_post),
+        4) discriminator loss.
 
     Along with the total loss value, a list is returned for the losses of each of the individual losses.
     If these losses are not included then they will be returned as 0's. The losses are returned as
@@ -282,16 +287,20 @@ def lvae_lin_loss(target,
     :param lin_logvar: The log variance from the linear layer
     :param mm_mu: The mean from mixed model (beta0 + beta1 * t).
     :param mm_var: The variance form the mixed model.
+    :param d_output: The image and reconstruction after being passed through the discriminator.
+    :param d_labels: The labels containing  0s and 1s for the discriminator.
     :param beta: A parameter for weighing the importance of the KL divergence loss on the total loss.
     :param gamma: A parameter for weighing the importance of the alignment loss on the total loss.
+    :param nu: A parameter for weighing the importance of the discriminator loss on the total loss.
     :param recon: If True then implement the reproduction loss.
     :param kl: If True then implement the KL diverge loss.
     :param align: If true then implement the alignment loss.
+    :param disc_loss: If true then implement the discriminator loss.
     :return:
     """
 
     total_loss = 0
-    losses = [0] * 4
+    losses = [0] * 5
     if recon:
         reproduction_loss = F.mse_loss(target, output, reduction='mean')
         bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
@@ -337,6 +346,11 @@ def lvae_lin_loss(target,
         total_loss += (gamma * align_loss)
         losses[3] = (gamma * align_loss.item())
         # raise Exception('Not implemented')
+
+    if disc_loss:
+        loss_d = d_loss(d_output, d_labels)
+        total_loss += (nu * loss_d)
+        losses[4] = (nu * loss_d.item())
 
     losses[0] = total_loss.item()
 

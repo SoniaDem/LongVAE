@@ -159,7 +159,6 @@ optimizer = torch.optim.SGD(list(model.parameters()),
 if delta is not None:
     model.delta = delta
 
-
 model.mixed_model = mixed_model
 
 if igls_iterations is not None:

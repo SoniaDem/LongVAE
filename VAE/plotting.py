@@ -222,33 +222,42 @@ def plot_losses(losses,
     losses = loss_txt_to_array(losses) if type(losses) == str else losses
     epochs = list(range(losses.shape[1]))
 
-    plt.figure(figsize=(10, 10))
+    n = losses.shape[0]
+    c = 3 if n == 5 else 2
 
-    plt.subplot(2, 2, 1)
+    plt.figure(figsize=(6.5, 6.5))
+
+    plt.subplot(c, 2, 1)
     plt.plot(epochs, losses[0, :], color='tab:red')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Total Loss', weight='bold')
 
-    plt.subplot(2, 2, 2)
+    plt.subplot(c, 2, 2)
     plt.plot(epochs, losses[1, :], color='tab:blue')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Reconstruction Loss', weight='bold')
 
-    plt.subplot(2, 2, 3)
+    plt.subplot(c, 2, 3)
     plt.plot(epochs, losses[2, :], color='tab:orange')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('KL Divergence Loss', weight='bold')
 
-    plt.subplot(2, 2, 4)
+    plt.subplot(c, 2, 4)
     plt.plot(epochs, losses[3, :], color='tab:green')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Alignment Loss', weight='bold')
 
+    if n == 5:
+        plt.subplot(c, 2, 5)
+        plt.plot(epochs, losses[4, :], color='gold')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Discriminator Loss', weight='bold')
+
     plt.tight_layout()
     plt.show()
-
 

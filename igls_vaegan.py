@@ -48,8 +48,8 @@ save_epochs = int(params["SAVE_EPOCHS"])
 recon_loss = True if params["RECON_LOSS"].lower() == 'true' else False
 disc_loss = True if params["D_LOSS"].lower() == 'true' else False
 align_loss = True if params["ALIGN_LOSS"].lower() == 'true' else False
-beta = 1 if "BETA" not in params["BETA"] else float(params["BETA"])
-gamma = 1 if "GAMMA" not in params["GAMMA"] else float(params["GAMMA"])
+beta = 1 if "BETA" not in params else float(params["BETA"])
+gamma = 1 if "GAMMA" not in params else float(params["GAMMA"])
 lr = float(params["LR"]) if "LR" in params else 1e-4
 d_lr = float(params["D_LR"])*lr if "D_LR" in params else lr
 momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9

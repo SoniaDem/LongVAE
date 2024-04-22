@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 import albumentations as a
 
 from VAE.dataloader import LongDataset, SubjectPerBatchSampler
-from VAE.models import VAE_IGLS, LVAE_LIN
+from VAE.models import VAE_IGLS, LVAE_LIN, VAEGAN_IGLS
 from VAE.utils import get_args
 from VAE.plotting import plot_slice_prediction
 
@@ -38,6 +38,7 @@ version = int(params["VERSION"])
 axis = 0 if "AXIS" not in params else int(params["AXIS"])
 image_no = None if 'IMAGE_NO' not in params else int(params['IMAGE_NO'])
 
+use_gan = True if "GAN" in params and params["GAN"].lower() == 'true' else False
 mixed_model = True if 'MIXED_MODEL' in params.keys() and params['MIXED_MODEL'].lower() == 'true' else False
 train_with_igls = True if mixed_model else False
 igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
@@ -83,7 +84,10 @@ print(f'Loaded data: \n\tTotal data points {len(dataloader.dataset)}, '
 
 # ----------------------------- Load Model ---------------------------- 1.
 
-if version == 1:
+if version == 1 and use_gan:
+    model = VAEGAN_IGLS(int(params["Z_DIM"]))
+
+if version == 1 and not use_gan:
     model = VAE_IGLS(int(params["Z_DIM"]))
 
 if version == 2:

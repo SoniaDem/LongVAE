@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 import albumentations as a
 
 from VAE.dataloader import LongDataset, SubjectPerBatchSampler
-from VAE.models import VAE_IGLS, LVAE_LIN, VAEGAN_IGLS
+from VAE.models import VAE_IGLS, LVAE_LIN, VAEGAN_IGLS, LVAEGAN_LIN
 from VAE.utils import get_args
 from VAE.plotting import plot_slice_prediction
 
@@ -90,7 +90,10 @@ if version == 1 and use_gan:
 if version == 1 and not use_gan:
     model = VAE_IGLS(int(params["Z_DIM"]))
 
-if version == 2:
+if version == 2 and use_gan:
+    model = LVAEGAN_LIN(int(params["Z_DIM"]))
+
+if version == 2 and not use_gan:
     model = LVAE_LIN(int(params["Z_DIM"]))
 
 model_dir = os.path.join(project_dir, 'Models')

@@ -1,4 +1,5 @@
 from VAE.utils import get_args
+from os.path import join
 
 
 def default_true(dic, param):
@@ -17,7 +18,7 @@ def default_int(dic, param, val):
     return int(dic[param] if param in dic else val)
 
 
-def param_dict(path):
+def get_params(path):
 
     params = get_args(path)
 
@@ -25,6 +26,10 @@ def param_dict(path):
                   "PROJECT_DIR": params["PROJECT_DIR"],
                   "IMAGE_DIR": params["IMAGE_DIR"],
                   "SUBJ_DIR": params["SUBJ_DIR"],
+                  "SUBJ_PATH": 'subject_id_key.csv' if "SUBJ_PATH" not in params else params["SUBJ_PATH"],
+                  "LATENT_DIR": join(params, 'LatentParams'),
+                  "MODEL_DIR":  join(params, 'Models'),
+                  "LOG_DIR":  join(params, 'LogFiles'),
                   "VERSION": default_int(params, "VERSION", 1),
                   "Z_DIM": default_int(params, "Z_DIM", 64),
                   "MIXED_MODEL": default_false(params, "MIXED_MODEL"),

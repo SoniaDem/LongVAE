@@ -227,45 +227,45 @@ def lvaegan_loss(target,
     """
 
     total_loss = 0
-    losses = [0] * 4
+    losses = [0] * 5
     if bse:
         reproduction_loss = F.mse_loss(target, output, reduction='mean')
         bce_loss = torch.sum(torch.sum(0.5 * reproduction_loss))
         total_loss += bce_loss
         losses[1] = bce_loss.item()
 
-    if disc_loss:
-        loss_d = d_loss(d_output, d_labels)
-        total_loss += (beta * loss_d)
-        losses[2] = (beta * loss_d.item())
-
     if align:
         align_loss = F.mse_loss(prior_z, post_z, reduction='mean')
         total_loss += (gamma * align_loss)
-        losses[3] = (gamma * align_loss.item())
+        losses[2] = (gamma * align_loss.item())
+
+    if disc_loss:
+        loss_d = d_loss(d_output, d_labels)
+        total_loss += (beta * loss_d)
+        losses[3] = (beta * loss_d.item())
 
     losses[0] = total_loss.item()
 
     return total_loss, losses
 
 
-def lvaegan_lin_loss(target,
-                    output,
-                    lin_z_hat,
-                    mm_z_hat,
-                    lin_mu,
-                    lin_logvar,
-                    mm_mu,
-                    mm_var,
-                    d_output=None,
-                    d_labels=None,
-                    beta=1,
-                    gamma=1,
-                    nu=1,
-                    recon=True,
-                    kl=True,
-                    align=True,
-                    disc_loss=True):
+def lvaegan2_loss(target,
+                  output,
+                  lin_z_hat,
+                  mm_z_hat,
+                  lin_mu,
+                  lin_logvar,
+                  mm_mu,
+                  mm_var,
+                  d_output=None,
+                  d_labels=None,
+                  beta=1,
+                  gamma=1,
+                  nu=1,
+                  recon=True,
+                  kl=True,
+                  align=True,
+                  disc_loss=True):
     """
     This function calculates the loss for the longitudinal VAE.
     It consists of 4 components:
@@ -336,7 +336,7 @@ def lvaegan_lin_loss(target,
         # print('kl_tot', kl_tot.shape)
         kl_tot = beta * kl_tot.mean()
         total_loss += kl_tot
-        losses[2] += kl_tot.item()
+        losses[4] += kl_tot.item()
         # print('kl_tot', kl_tot)
 
         # raise Exception('Not implemented')
@@ -344,13 +344,13 @@ def lvaegan_lin_loss(target,
     if align:
         align_loss = F.mse_loss(lin_z_hat, mm_z_hat, reduction='mean')
         total_loss += (gamma * align_loss)
-        losses[3] = (gamma * align_loss.item())
+        losses[2] = (gamma * align_loss.item())
         # raise Exception('Not implemented')
 
     if disc_loss:
         loss_d = d_loss(d_output, d_labels)
         total_loss += (nu * loss_d)
-        losses[4] = (nu * loss_d.item())
+        losses[3] = (nu * loss_d.item())
 
     losses[0] = total_loss.item()
 

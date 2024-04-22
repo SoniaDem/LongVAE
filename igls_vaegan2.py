@@ -28,7 +28,7 @@ import os
 
 from VAE.models import LVAEGAN_LIN
 from VAE.dataloader import LongDataset, SubjectBatchSampler
-from VAE.train import lvaegan_lin_loss, loss_fn, d_loss
+from VAE.train import lvaegan2_loss, loss_fn, d_loss
 from VAE.utils import get_args, list_to_str
 
 # ----------------------------------------- Load parameters ----------------------------------------------------
@@ -218,24 +218,24 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
             d_output = None
             d_labels = None
 
-        loss, each_loss = lvaegan_lin_loss(target=imgs,
-                                           output=pred,
-                                           lin_z_hat=lin_z_hat,
-                                           mm_z_hat=mm_z_hat,
-                                           lin_mu=lin_mu,
-                                           lin_logvar=lin_logvar,
-                                           mm_mu=mm_mu,
-                                           mm_var=mm_var,
-                                           d_output=d_output,
-                                           d_labels=d_labels,
-                                           beta=beta,
-                                           gamma=gamma,
-                                           nu=nu,
-                                           recon=recon_loss,
-                                           kl=kl_loss,
-                                           align=align_loss,
-                                           disc_loss=disc_loss,
-                                           )
+        loss, each_loss = lvaegan2_loss(target=imgs,
+                                        output=pred,
+                                        lin_z_hat=lin_z_hat,
+                                        mm_z_hat=mm_z_hat,
+                                        lin_mu=lin_mu,
+                                        lin_logvar=lin_logvar,
+                                        mm_mu=mm_mu,
+                                        mm_var=mm_var,
+                                        d_output=d_output,
+                                        d_labels=d_labels,
+                                        beta=params["BETA"],
+                                        gamma=params["GAMMA"],
+                                        nu=params["NU"],
+                                        recon=params["RECON_LOSS"],
+                                        kl=params["KL_LOSS"],
+                                        align=params["ALIGN_LOSS"],
+                                        disc_loss=params["D_LOSS"],
+                                        )
         # print(loss, each_loss)
 
         print('\tgot loss value', each_loss)

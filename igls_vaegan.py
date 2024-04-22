@@ -41,10 +41,10 @@ if not os.path.isdir(project_dir):
 project_files = os.listdir(project_dir)
 h_flip = 0. if "H_FLIP" not in params else float(params["H_FLIP"])
 v_flip = 0. if "V_FLIP" not in params else float(params["V_FLIP"])
-batch_size = int(params["BATCH_SIZE"])
+batch_size = int(params["BATCH_SIZE"]) if 'BATCH_SIZE' in params else 100
 shuffle_batches = True if params['SHUFFLE_BATCHES'].lower() == 'true' else False
-epochs = int(params["EPOCHS"])
-save_epochs = int(params["SAVE_EPOCHS"])
+epochs = int(params["EPOCHS"]) if "EPOCHS" in params else 100
+save_epochs = int(params["SAVE_EPOCHS"]) if "SAVE_EPOCHS" in params else 10
 recon_loss = True if params["RECON_LOSS"].lower() == 'true' else False
 disc_loss = True if params["D_LOSS"].lower() == 'true' else False
 align_loss = True if params["ALIGN_LOSS"].lower() == 'true' else False
@@ -56,7 +56,7 @@ momentum = float(params["MOMENTUM"]) if "MOMENTUM " in params.keys() else 0.9
 delta = None if "DELTA" not in params else float(params["DELTA"])
 sampler_params = [3, 6] if 'SAMPLER_PARAMS' not in params else params['SAMPLER_PARAMS']
 use_sampler = True if 'USE_SAMPLER' not in params or params["USE_SAMPLER"].lower() == 'true' else False
-train_with_igls = True if 'ESTIMATE_IGLS' in params and params["USE_SAMPLER"].lower() == 'true' else False
+# train_with_igls = True if 'ESTIMATE_IGLS' in params and params["USE_SAMPLER"].lower() == 'true' else False
 mixed_model = True if 'MIXED_MODEL' in params and params['MIXED_MODEL'].lower() == 'true' else False
 igls_iterations = int(params['IGLS_ITERATIONS']) if 'IGLS_ITERATIONS' in params.keys() else None
 save_latent = True if "SAVE_LATENT" in params and params["SAVE_LATENT"].lower() == 'true' else False

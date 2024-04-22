@@ -11,6 +11,8 @@
         mu = beta_0 + beta_1 * t
     and
         sigma = sigma_a0^2 + sigma_a1^2 + sigma_e^2.
+
+    This version also has a GAN element.
 """
 
 # ----------------------------------------- Load Packages ----------------------------------------------------

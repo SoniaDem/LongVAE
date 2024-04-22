@@ -168,7 +168,7 @@ vae_parameters = list(model.encoder.parameters()) + \
                  list(model.linear_mu.parameters()) + \
                  list(model.linear_z_ijk.parameters())
 optimizer = Adam(vae_parameters, lr=lr)
-d_optimizer = Adam(model.discriminator.parameters(), lr=d_lr)
+d_optimizer = SGD(model.discriminator.parameters(), lr=d_lr)
 
 model.mixed_model = mixed_model
 
@@ -261,9 +261,9 @@ for epoch in range(pre_epochs, pre_epochs + epochs):
 
     print(f'\n\tLoss: {losses[-1][0]:.6f}')
     print(f'\tRecon {losses[-1][1]:.6f}')
-    print(f'\tKL    {losses[-1][3]:.6f}')
-    print(f'\tAlign {losses[-1][4]:.6f}')
-    print(f'\tDiscr {losses[-1][2]:.6f}\n')
+    print(f'\tKL    {losses[-1][2]:.6f}')
+    print(f'\tAlign {losses[-1][3]:.6f}')
+    print(f'\tDiscr {losses[-1][4]:.6f}\n')
 
     optimizer.zero_grad(set_to_none=True)
     model.zero_grad(set_to_none=True)

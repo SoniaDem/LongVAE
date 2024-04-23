@@ -1403,3 +1403,293 @@ class LVAEGAN_LIN(Module):
     def igls_reparameterise_multivar(mean, cov_mat):
         return MultivariateNormal(loc=mean,
                                   covariance_matrix=cov_mat).sample([1])  # size (1, k_dims, batch_size)
+
+
+class LMMVAEGAN(Module):
+    def __init__(self, z_dim, gan=False, version=1):
+        super(LMMVAEGAN, self).__init__()
+
+        self.batch_size = None
+        self.device = None
+        self.encoder = Encoder3d()
+        self.linear_z_ijk = Linear(2560, z_dim)
+        self.decoder = Decoder3d_igls(z_dims=z_dim, flat_dim=2560)
+        self.igls_iterations = 1
+        self.k_dims = z_dim
+        self.reset_sig_est = True
+        self.mixed_model = True
+        self.version = version
+        if gan:
+            self.discriminator = Discriminator3d()
+        if version == 1:
+            self.save_latent = None
+            self.slope = True
+            self.a01 = True
+        if version == 2:
+            self.linear_var = Linear(z_dim, z_dim)
+            self.linear_mu = Linear(z_dim, z_dim)
+
+    def forward(self, x, subject_ids, times):
+        self.device = x.device
+        self.batch_size = x.shape[0]
+        encoded_x = self.encoder(x)
+
+        z_ijk = self.linear_z_ijk(encoded_x)
+
+        if self.save_latent is not None:
+            torch.save(z_ijk, self.save_latent)
+
+        if self.version == 1:
+            if self.mixed_model:
+                if self.a01:
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+                else:
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator_noa01(z_ijk, subject_ids, times)
+
+                mu = betahat[:, 0] + (betahat[:, 1] * times)
+                a0, a1, e = self.igls_reparameterise_v1(sig_randeffs, sig_errs, subject_ids)
+                z_hat = mu.T + a0 + a1 + e
+                igls_vars = torch.cat([sig_randeffs[:, 0, 0].expand(1, -1),
+                                       sig_randeffs[:, 1, 1].expand(1, -1),
+                                       sig_errs.expand(1, -1)], axis=0)
+                x = self.decoder(z_hat)
+
+            else:
+                x = self.decoder(z_ijk)
+                z_hat = z_ijk
+                cov_mat = None,
+                mu = None,
+                betahat = None
+                igls_vars = None
+
+            return x, z_ijk, z_hat, cov_mat, mu, betahat, igls_vars
+
+        if self.version == 2:
+            lin_mu = self.linear_mu(z_ijk)
+            lin_logvar = self.linear_var(z_ijk)
+            lin_z_hat = self.reparameterise(lin_mu, lin_logvar)
+            x = self.decoder(lin_z_hat)
+            if self.mixed_model:
+                cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+                mm_mu = (betahat[:, 0] + (betahat[:, 1] * times)).T
+
+                a0, a1, e = self.igls_reparameterise_v2(sig_randeffs, sig_errs, subject_ids)
+                mm_z_hat = mm_mu + a0 + a1 + e
+
+                sig_a0s = sig_randeffs[:, 0, 0].repeat(self.batch_size, 1)
+                sig_a1s = sig_randeffs[:, 1, 1].repeat(self.batch_size, 1)
+                sig_errs = sig_errs.repeat(self.batch_size, 1)
+                times = times.view(-1, 1)
+
+                mm_var = sig_a0s + (sig_a1s * pow(times, 2)) + sig_errs
+
+                return x, lin_z_hat, lin_mu, lin_logvar, mm_z_hat, mm_mu, mm_var
+
+            else:
+                return x, lin_z_hat, lin_mu, lin_logvar, None, None, None
+
+    def igls_estimator(self, z_ijk, subject_ids, times):
+
+        z1 = eye(self.batch_size).to(self.device)
+        z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z3 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z4 = zeros((self.batch_size, self.batch_size)).to(self.device)
+
+        for i in range(self.batch_size):
+            for j in range(self.batch_size):
+
+                subj_i = subject_ids[i]
+                subj_j = subject_ids[j]
+
+                visit_i = times[i]
+                visit_j = times[j]
+
+                if subj_i == subj_j:
+                    z2[i, j] = 1
+                    z3[i, j] = visit_i + visit_j
+                    z4[i, j] = visit_i * visit_j
+
+        xx = ones((self.k_dims, self.batch_size, 2)).to(self.device)  # size (k_dims, batch_size, 2)
+        xx[:, :, 1] = times.repeat(self.k_dims, 1)  # size (k_dims, batch_size, 2)
+        b1 = inverse(bmm(xx.transpose(2, 1), xx))  # following bmm, the size is (k_dims, 2, 2). This will do the
+        # inverse of  each (2, 2) matrix.
+        b2 = bmm(xx.transpose(2, 1), z_ijk.expand(1, -1, -1).transpose(2, 0))
+        betahat = bmm(b1, b2)  # size (k_dims, 2, 1)
+
+        vz1 = flatten(z1.transpose(1, 0)).expand(1, -1).T  # size (batch_size^2, 1)
+        vz2 = flatten(z2.transpose(1, 0)).expand(1, -1).T
+        vz3 = flatten(z3.transpose(1, 0)).expand(1, -1).T
+        vz4 = flatten(z4.transpose(1, 0)).expand(1, -1).T
+        zz = cat((vz1, vz2, vz3, vz4), axis=1)  # size (batch_size^2, 4)
+
+        z1 = z1.repeat(self.k_dims, 1, 1)  # size (k_dims, batch_size, batch_size)
+        z2 = z2.repeat(self.k_dims, 1, 1)
+        z3 = z3.repeat(self.k_dims, 1, 1)
+        z4 = z4.repeat(self.k_dims, 1, 1)
+
+        sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
+        for _ in range(self.igls_iterations):
+            zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
+            ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
+            ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
+            ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
+            ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
+
+            # size (4, k_dims)
+            sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
+
+            # HERE WE FORCED SMALL NEGATIVE VALUES to be zero because we need the
+            # covariance matrix to be positive definite.
+            if self.reset_sig_est:
+                sig_est[torch.where(sig_est <= 0)] = 1e-6
+
+            # size (k_dims, 1, 1)
+            s_e = expand_vec(z1, sig_est[0])
+            s_a0 = expand_vec(z2, sig_est[1])
+            s_a01 = expand_vec(z3, sig_est[2])
+            s_a1 = expand_vec(z4, sig_est[3])
+
+            # size (k_dims, batch_size, batch_size)
+            sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
+            sigma_update = sigma_update.double()
+
+            inv_sig_up = inverse(sigma_update).float()
+            sigma_update = sigma_update.float()
+
+            b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
+            # b2 size (k_dims, 2, 1)
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            # size (k_dims, 2, 1)
+            betahat = bmm(b1, b2)
+
+        sig_rand_eff = torch.empty(self.k_dims, 2, 2).to(self.device)
+        sig_errs = sig_est[0].to(self.device)
+        for k in range(self.k_dims):
+            s_a0 = sig_est[1][k]
+            s_a01 = sig_est[2][k]
+            s_a1 = sig_est[3][k]
+            sig_rand_eff[k, :, :] = tensor([[s_a0, s_a01], [s_a01, s_a1]])
+
+        return sigma_update, betahat, sig_rand_eff, sig_errs
+
+    def igls_estimator_noa01(self, z_ijk, subject_ids, times):
+
+        z1 = eye(self.batch_size).to(self.device)
+        z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
+        z4 = zeros((self.batch_size, self.batch_size)).to(self.device)
+
+        for i in range(self.batch_size):
+            for j in range(self.batch_size):
+                subj_i = subject_ids[i]
+                subj_j = subject_ids[j]
+                visit_i = times[i]
+                visit_j = times[j]
+
+                if subj_i == subj_j:
+                    z2[i, j] = 1
+                    z4[i, j] = visit_i * visit_j
+
+        xx = ones((self.k_dims, self.batch_size, 2)).to(self.device)  # size (k_dims, batch_size, 2)
+        xx[:, :, 1] = times.repeat(self.k_dims, 1)  # size (k_dims, batch_size, 2)
+        b1 = inverse(bmm(xx.transpose(2, 1), xx))  # following bmm, the size is (k_dims, 2, 2). This will do the
+        # inverse of  each (2, 2) matrix.
+        b2 = bmm(xx.transpose(2, 1), z_ijk.expand(1, -1, -1).transpose(2, 0))
+        betahat = bmm(b1, b2)  # size (k_dims, 2, 1)
+
+        vz1 = flatten(z1.transpose(1, 0)).expand(1, -1).T  # size (batch_size^2, 1)
+        vz2 = flatten(z2.transpose(1, 0)).expand(1, -1).T
+        vz4 = flatten(z4.transpose(1, 0)).expand(1, -1).T
+        zz = cat((vz1, vz2, vz4), axis=1)  # size (batch_size^2, 3)
+
+        z1 = z1.repeat(self.k_dims, 1, 1)  # size (k_dims, batch_size, batch_size)
+        z2 = z2.repeat(self.k_dims, 1, 1)
+        z4 = z4.repeat(self.k_dims, 1, 1)
+
+        sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
+        for _ in range(self.igls_iterations):
+            zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
+            ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
+            ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
+            ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
+            ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
+
+            sig_est = inverse(zz.T @ zz) @ (zz.T @ ztz)
+
+            if self.reset_sig_est:
+                sig_est[torch.where(sig_est <= 0)] = 1e-6
+
+            s_e = expand_vec(z1, sig_est[0])
+            s_a0 = expand_vec(z2, sig_est[1])
+            s_a1 = expand_vec(z4, sig_est[2])
+
+            if self.slope:
+                sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a1 * z4)
+            else:
+                sigma_update = (s_e * z1) + (s_a0 * z2)
+
+            sigma_update = sigma_update.double()
+            inv_sig_up = inverse(sigma_update).float()
+            sigma_update = sigma_update.float()
+            b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            betahat = bmm(b1, b2)
+
+        sig_rand_eff = torch.empty(self.k_dims, 2, 2).to(self.device)
+        sig_errs = sig_est[0].to(self.device)
+        for k in range(self.k_dims):
+            s_a0 = sig_est[1][k]
+            # s_a01 = sig_est[2][k]
+            s_a1 = sig_est[2][k]
+            sig_rand_eff[k, :, :] = tensor([[s_a0, 0], [0, s_a1]])
+
+        return sigma_update, betahat, sig_rand_eff, sig_errs
+
+    def igls_reparameterise_v1(self, sig_rand_effs, sig_errs, subject_ids):
+
+        s_a0 = sig_rand_effs[:, 0, 0]
+        s_a1 = sig_rand_effs[:, 1, 1]
+
+        a0 = empty(self.batch_size, self.k_dims).to(self.device)
+        a1 = empty(self.batch_size, self.k_dims).to(self.device)
+
+        mean_zeros = zeros_like(s_a0)
+        vec_ones = ones_like(s_a0)
+
+        unique_ids = torch.unique(subject_ids)
+        for subj_id in unique_ids:
+            a0[torch.where(subject_ids == subj_id)] = s_a0 * Normal(mean_zeros, vec_ones).sample([1])
+            a1[torch.where(subject_ids == subj_id)] = s_a1 * Normal(mean_zeros, vec_ones).sample([1])
+
+        e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
+
+        return a0, a1, e
+
+    def igls_reparameterise_v2(self, sig_rand_effs, sig_errs, subject_ids):
+
+        s_a0 = sig_rand_effs[:, 0, 0]
+        s_a1 = sig_rand_effs[:, 1, 1]
+
+        a0 = empty(self.batch_size, self.k_dims).to(self.device)
+        a1 = empty(self.batch_size, self.k_dims).to(self.device)
+
+        mean_zeros = zeros_like(s_a0)
+
+        unique_ids = torch.unique(subject_ids)
+        for subj_id in unique_ids:
+            a0[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a0).sample([1])
+            a1[torch.where(subject_ids == subj_id)] = Normal(mean_zeros, s_a1).sample([1])
+
+        e = Normal(mean_zeros, sig_errs).sample([self.batch_size])
+
+        return a0, a1, e
+
+    @staticmethod
+    def reparameterise(mu, log_var):
+        std = exp(0.5 * log_var)
+        e = randn_like(std)
+        return mu + (std * e)
+
+
+
+
+

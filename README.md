@@ -63,7 +63,7 @@ Many of the parameters used for training are also required for the visualisation
 | PLOT_EPOCH                | When using this parameter file for evaluation, this is the number of epochs corresponding to the model being evaluation. (Default `100`) |
 | IMAGE_NO                  | The specific subject you want to visualise. (Default `0`) |
 | TIMEPOINT                 | The specific time point index from the subject to visualise (Default `0`) |
-
+| AXIS                      | As the image is 3D, specify the axis to view the 2D slice from. (Default `2`) |
 
 ## Other Stuff to describe later.
 

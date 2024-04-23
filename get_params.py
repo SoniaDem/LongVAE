@@ -22,14 +22,16 @@ def get_params(path):
 
     params = get_args(path)
 
+    project_dir = join(params["PROJECT_DIR"], params["NAME"])
+
     param_dict = {"NAME": params["NAME"],
-                  "PROJECT_DIR": params["PROJECT_DIR"],
+                  "PROJECT_DIR": project_dir,
                   "IMAGE_DIR": params["IMAGE_DIR"],
                   "SUBJ_DIR": params["SUBJ_DIR"],
                   "SUBJ_PATH": 'subject_id_key.csv' if "SUBJ_PATH" not in params else params["SUBJ_PATH"],
-                  "LATENT_DIR": join(params, 'LatentParams'),
-                  "MODEL_DIR":  join(params, 'Models'),
-                  "LOG_DIR":  join(params, 'LogFiles'),
+                  "LATENT_DIR": join(project_dir, 'LatentParams'),
+                  "MODEL_DIR":  join(project_dir,  'Models'),
+                  "LOG_DIR":  join(project_dir,  'LogFiles'),
                   "VERSION": default_int(params, "VERSION", 1),
                   "Z_DIM": default_int(params, "Z_DIM", 64),
                   "MIXED_MODEL": default_false(params, "MIXED_MODEL"),
@@ -46,6 +48,7 @@ def get_params(path):
                   "H_FLIP": default_float(params, "H_FLIP", 0.),
                   "V_FLIP": default_float(params, "V_FLIP", 0.),
                   "EPOCHS": default_int(params, "EPOCHS", 100),
+                  "SAVE_EPOCHS": default_int(params, "SAVE_EPOCHS", 100),
                   "LR": default_float(params, "LR", 1e-5),
                   "D_LR": default_float(params, "D_LR", 1e-5),
                   "RECON_LOSS": default_true(params, "RECON_LOSS"),
@@ -55,8 +58,9 @@ def get_params(path):
                   "BETA": default_float(params, "BETA", 1.),
                   "GAMMA": default_float(params, "GAMMA", 1.),
                   "NU": default_float(params, "NU", 1.),
-                  "PLOT_EPOCH": default_int(params, "100"),
+                  "PLOT_EPOCH": default_int(params, "PLOT_EPOCH", 100),
                   "IMAGE_NO": default_int(params, "IMAGE_NO", 0),
-                  "TIMEPOINT": default_int(params, "TIMEPOINT", 0)
+                  "TIMEPOINT": default_int(params, "TIMEPOINT", 0),
+                  "AXIS": default_int(params, "AXIS", 2)
                   }
     return param_dict

@@ -39,8 +39,10 @@ if not os.path.isdir(params["PROJECT_DIR"]):
     loss_file.close()
 
 log_no = len(os.listdir(params["LOG_DIR"]))
-logging.basicConfig(filename=os.path.join(params["LOG_DIR"], f'{name}_{log_no}.log'))
-logging.info("Loaded packages and parameter file.")
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename=os.path.join(params["LOG_DIR"], f'{name}_{log_no}.log'),
+                    level=logging.DEBUG)
+logger.info("Loaded packages and parameter file.")
 
 # ----------------------------------------- Load data ----------------------------------------------------
 
@@ -50,7 +52,7 @@ subject_key = pd.read_csv(os.path.join(params["SUBJ_DIR"], params["SUBJ_PATH"]))
 
 # Get cuda device
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-logging.info(f"Device = {device}")
+logger.info(f"Device = {device}")
 
 transforms = a.Compose([
     a.HorizontalFlip(p=params["H_FLIP"]),
@@ -78,7 +80,7 @@ else:
                             batch_size=params["BATCH_SIZE"],
                             shuffle=params["SHUFFLE_BATCHES"])
 
-logging.info(f"Loaded data: \n\tTotal data points {len(dataloader.dataset)},")
+logger.info(f"Loaded data: \n\tTotal data points {len(dataloader.dataset)},")
 
 # ----------------------------------------- Initiate Model ----------------------------------------------------
 
@@ -90,19 +92,19 @@ if os.path.isdir(params["MODEL_DIR"]) and len(os.listdir(params["MODEL_DIR"])) >
     model_epochs = [int(m.split('_')[-1].replace('.h5', '')) for m in model_list]
     pre_epochs = max(model_epochs)
     model_name = model_list[model_epochs.index(pre_epochs)]
-    logging.info(f'Model name: {model_name}')
+    logger.info(f'Model name: {model_name}')
     try:
         model.load_state_dict(torch.load(os.path.join(params["MODEL_DIR"], model_name)))
-        logging.info('Matched model keys successfully.')
+        logger.info('Matched model keys successfully.')
     except NameError:
-        logging.critical(f'Model matching unsuccessful: \n\t"{model_name}"')
+        logger.critical(f'Model matching unsuccessful: \n\t"{model_name}"')
 
 elif os.path.isdir(params["MODEL_DIR"]) and len(os.listdir(params["MODEL_DIR"])) == 0:
     pre_epochs = 0
 else:
     os.mkdir(params["MODEL_DIR"])
     pre_epochs = 0
-    logging.info('Made new model.')
+    logger.info('Made new model.')
 
 model = model.to(device)
 
@@ -119,7 +121,7 @@ if params["VERSION"] == 2:
 optimizer = Adam(vae_parameters, lr=params["LR"])
 
 if params["GAN"]:
-    d_optimizer = SGD(model.discriminator.parameters(), lr=params["D_LR"])
+    d_optimizer = SGD(model.discriminator.parameters(), lr=params["D_LR"], momentum=0.9)
 
 model.mixed_model = params["MIXED_MODEL"]
 model.igls_iterations = params["IGLS_ITERATIONS"]
@@ -129,7 +131,7 @@ if params["VERSION"] == 1:
     model.slope = params["SLOPE"]
     model.a01 = params["INCLUDE_A01"]
 
-
+logger.info('Parameters and optimizers initialised.')
 # ----------------------------------------------- Train Loop --------------------------------------------------------
 
 losses = []
@@ -138,7 +140,7 @@ for epoch in range(pre_epochs, pre_epochs + params["EPOCHS"]):
     for batch_no, batch in enumerate(dataloader):
         progress = f'\tEpoch [{epoch + 1} / {pre_epochs + params["EPOCHS"]}]  -  '\
                    + f'Batch [{batch_no + 1} / {len(dataloader)}]'
-        logging.info(progress)
+        logger.info(progress)
         print(progress)
 
         imgs = batch[0].to(device)
@@ -205,49 +207,49 @@ for epoch in range(pre_epochs, pre_epochs + params["EPOCHS"]):
                 d_output = None
                 d_labels = None
 
-                loss, each_loss = lvaegan2_loss(target=imgs,
-                                                output=pred,
-                                                lin_z_hat=lin_z_hat,
-                                                mm_z_hat=mm_z_hat,
-                                                lin_mu=lin_mu,
-                                                lin_logvar=lin_logvar,
-                                                mm_mu=mm_mu,
-                                                mm_var=mm_var,
-                                                d_output=d_output,
-                                                d_labels=d_labels,
-                                                beta=params["BETA"],
-                                                gamma=params["GAMMA"],
-                                                nu=params["NU"],
-                                                recon=params["RECON_LOSS"],
-                                                kl=params["KL_LOSS"],
-                                                align=params["ALIGN_LOSS"],
-                                                disc_loss=params["D_LOSS"],
-                                                )
+            loss, each_loss = lvaegan2_loss(target=imgs,
+                                            output=pred,
+                                            lin_z_hat=lin_z_hat,
+                                            mm_z_hat=mm_z_hat,
+                                            lin_mu=lin_mu,
+                                            lin_logvar=lin_logvar,
+                                            mm_mu=mm_mu,
+                                            mm_var=mm_var,
+                                            d_output=d_output,
+                                            d_labels=d_labels,
+                                            beta=params["BETA"],
+                                            gamma=params["GAMMA"],
+                                            nu=params["NU"],
+                                            recon=params["RECON_LOSS"],
+                                            kl=params["KL_LOSS"],
+                                            align=params["ALIGN_LOSS"],
+                                            disc_loss=params["D_LOSS"],
+                                            )
 
-            loss.backward()
-            optimizer.step()
-            epoch_losses.append(each_loss)
-            epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
-            losses.append(epoch_losses)
+        loss.backward()
+        optimizer.step()
+        epoch_losses.append(each_loss)
+    epoch_losses = np.asarray(epoch_losses).mean(axis=0).tolist()
+    losses.append(epoch_losses)
 
-            # Save the model and the losses to the file if the correct epoch
-            if (epoch + 1) % params["SAVE_EPOCHS"] == 0:
-                torch.save(model.state_dict(), os.path.join(params["MODEL_DIR"], f'{name}_{epoch + 1}.h5'))
-                logging.info(f'Saved {name}_{epoch + 1}.h5')
+    # Save the model and the losses to the file if the correct epoch
+    if (epoch + 1) % params["SAVE_EPOCHS"] == 0:
+        torch.save(model.state_dict(), os.path.join(params["MODEL_DIR"], f'{name}_{epoch + 1}.h5'))
+        logger.info(f'Saved {name}_{epoch + 1}.h5')
 
-                loss_file = open(os.path.join(params["PROJECT_DIR"], loss_filename), 'a+')
-                for loss_line in losses[-params["SAVE_EPOCHS"]:]:
-                    loss_line = list_to_str(loss_line) + '\n'
-                    loss_file.write(loss_line)
-                loss_file.close()
-                logging.info('Saved losses')
+        loss_file = open(os.path.join(params["PROJECT_DIR"], loss_filename), 'a+')
+        for loss_line in losses[-params["SAVE_EPOCHS"]:]:
+            loss_line = list_to_str(loss_line) + '\n'
+            loss_file.write(loss_line)
+        loss_file.close()
+        logger.info('Saved losses')
 
-            logging.info(f'\n\tLoss: {losses[-1][0]:.6f}')
-            logging.info(f'\tRecon {losses[-1][1]:.6f}')
-            logging.info(f'\tAlign {losses[-1][2]:.6f}')
-            logging.info(f'\tDiscr {losses[-1][3]:.6f}')
-            logging.info(f'\tKL    {losses[-1][4]:.6f}\n')
+    logger.info(f'\n\tLoss: {losses[-1][0]:.6f}')
+    logger.info(f'\tRecon {losses[-1][1]:.6f}')
+    logger.info(f'\tAlign {losses[-1][2]:.6f}')
+    logger.info(f'\tDiscr {losses[-1][3]:.6f}')
+    logger.info(f'\tKL    {losses[-1][4]:.6f}\n')
 
-            optimizer.zero_grad(set_to_none=True)
-            model.zero_grad(set_to_none=True)
-            torch.cuda.empty_cache()
+    optimizer.zero_grad(set_to_none=True)
+    model.zero_grad(set_to_none=True)
+    torch.cuda.empty_cache()

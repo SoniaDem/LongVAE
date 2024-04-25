@@ -12,8 +12,8 @@ losses = loss_txt_to_array(path)
 
 
 plot_losses(losses)
-plot_losses(losses[:, :100])
-plot_losses(losses, 5)
+# plot_losses(losses[:, :100])
+# plot_losses(losses, 5)
 
 from torch import tensor
 import pandas as pd

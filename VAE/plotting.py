@@ -243,13 +243,13 @@ def plot_losses(losses,
     plt.plot(epochs, losses[2, :], color='tab:orange')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
-    plt.title('KL Divergence Loss', weight='bold')
+    plt.title('Alignment Loss', weight='bold')
 
     plt.subplot(c, 2, 4)
     plt.plot(epochs, losses[3, :], color='tab:green')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
-    plt.title('Alignment Loss', weight='bold')
+    plt.title('KL Divergence Loss', weight='bold')
 
     if n == 5:
         plt.subplot(c, 2, 5)

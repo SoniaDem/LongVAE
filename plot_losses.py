@@ -2,7 +2,7 @@ from VAE.plotting import plot_losses
 from VAE.train import loss_txt_to_array
 
 
-project_name = 'IGLS_VAEGAN_test2'
+project_name = 'IGLS_V1_32_detach'
 # path = f'D:\\ADNI_VAE\\Projects\\{project_name}\\{project_name}_loss.txt'
 path = f'D:\\Projects\\SoniaVAE\\Projects\\{project_name}\\{project_name}_loss.txt'
 
@@ -12,7 +12,7 @@ losses = loss_txt_to_array(path)
 
 
 plot_losses(losses)
-# plot_losses(losses[:, :100])
+# plot_losses(losses[:, 200:])
 # plot_losses(losses, 5)
 
 from torch import tensor

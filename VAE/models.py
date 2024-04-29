@@ -1436,15 +1436,23 @@ class LMMVAEGAN(Module):
 
         z_ijk = self.linear_z_ijk(encoded_x)
 
+        z_detached = z_ijk.detach()
+
         if self.save_latent is not None:
             torch.save(z_ijk, self.save_latent)
 
         if self.version == 1:
             if self.mixed_model:
                 if self.a01:
-                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk,
+                                                                                   z_detached,
+                                                                                   subject_ids,
+                                                                                   times)
                 else:
-                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator_noa01(z_ijk, subject_ids, times)
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator_noa01(z_ijk,
+                                                                                         z_detached,
+                                                                                         subject_ids,
+                                                                                         times)
 
                 mu = betahat[:, 0] + (betahat[:, 1] * times)
                 a0, a1, e = self.igls_reparameterise_v1(sig_randeffs, sig_errs, subject_ids)
@@ -1470,7 +1478,7 @@ class LMMVAEGAN(Module):
             lin_z_hat = self.reparameterise(lin_mu, lin_logvar)
             x = self.decoder(lin_z_hat)
             if self.mixed_model:
-                cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, subject_ids, times)
+                cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, None, subject_ids, times)
                 mm_mu = (betahat[:, 0] + (betahat[:, 1] * times)).T
 
                 a0, a1, e = self.igls_reparameterise_v2(sig_randeffs, sig_errs, subject_ids)
@@ -1488,7 +1496,7 @@ class LMMVAEGAN(Module):
             else:
                 return x, lin_z_hat, lin_mu, lin_logvar, None, None, None
 
-    def igls_estimator(self, z_ijk, subject_ids, times):
+    def igls_estimator(self, z_ijk, z_detached, subject_ids, times):
 
         z1 = eye(self.batch_size).to(self.device)
         z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
@@ -1528,9 +1536,15 @@ class LMMVAEGAN(Module):
         z4 = z4.repeat(self.k_dims, 1, 1)
 
         sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
-        for _ in range(self.igls_iterations):
+        for i in range(self.igls_iterations):
+
+            if z_detached is not None and i+1 < self.igls_iterations:
+                z = z_detached
+            else:
+                z = z_ijk
+
             zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
-            ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
+            ztilde = zhat.T - z  # size (batch_size, k_dims)
             ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
             ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
             ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
@@ -1558,7 +1572,7 @@ class LMMVAEGAN(Module):
 
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
             # b2 size (k_dims, 2, 1)
-            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z.expand(1, -1, -1).transpose(2, 0))
             # size (k_dims, 2, 1)
             betahat = bmm(b1, b2)
 
@@ -1572,7 +1586,7 @@ class LMMVAEGAN(Module):
 
         return sigma_update, betahat, sig_rand_eff, sig_errs
 
-    def igls_estimator_noa01(self, z_ijk, subject_ids, times):
+    def igls_estimator_noa01(self, z_ijk, z_detached, subject_ids, times):
 
         z1 = eye(self.batch_size).to(self.device)
         z2 = zeros((self.batch_size, self.batch_size)).to(self.device)
@@ -1606,9 +1620,14 @@ class LMMVAEGAN(Module):
         z4 = z4.repeat(self.k_dims, 1, 1)
 
         sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
-        for _ in range(self.igls_iterations):
+        for i in range(self.igls_iterations):
+            if i+1 < self.igls_iterations:
+                z = z_detached
+            else:
+                z = z_ijk
+
             zhat = betahat[:, 0] + (betahat[:, 1] * times)  # size (k_dims, batch_size)
-            ztilde = zhat.T - z_ijk  # size (batch_size, k_dims)
+            ztilde = zhat.T - z  # size (batch_size, k_dims)
             ztilde = ztilde.expand(1, -1, -1).transpose(2, 0)  # (k_dims, batch_size, 1)
             ztz = bmm(ztilde, ztilde.transpose(2, 1))  # size (k_dims, batch_size, batch_size)
             ztz = flatten(ztz, start_dim=1, end_dim=2).T  # size (k_dims, batch_size^2)
@@ -1631,7 +1650,7 @@ class LMMVAEGAN(Module):
             inv_sig_up = inverse(sigma_update).float()
             sigma_update = sigma_update.float()
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
-            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z_ijk.expand(1, -1, -1).transpose(2, 0))
+            b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z.expand(1, -1, -1).transpose(2, 0))
             betahat = bmm(b1, b2)
 
         sig_rand_eff = torch.empty(self.k_dims, 2, 2).to(self.device)

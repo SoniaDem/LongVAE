@@ -15,7 +15,7 @@ def default_float(dic, param, val):
 
 
 def default_int(dic, param, val):
-    return int(dic[param] if param in dic else val)
+    return int(dic[param]) if param in dic else val
 
 
 def get_params(path):

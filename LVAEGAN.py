@@ -74,20 +74,24 @@ if params["USE_SAMPLER"]:
                             num_workers=0,
                             batch_sampler=custom_sampler)
 
+    n_batches = 0
+    data_size = 0
+    for batch in dataloader:
+        n_batches += 1
+        data_size += batch[0].shape[0]
+
 else:
     dataloader = DataLoader(dataset=loaded_data,
                             num_workers=0,
                             batch_size=params["BATCH_SIZE"],
                             shuffle=params["SHUFFLE_BATCHES"])
+    n_batches = len(dataloader)
+    data_size = len(dataloader.dataset)
 
-logger.info(f"Loaded data: \n\tTotal data points {len(dataloader.dataset)},")
+logger.info(f"Loaded data: \n\tTotal data points {data_size},")
 
-c = 0
-for batch in dataloader:
-    print(f'batch_size = {batch[0].shape[0]}')
-    c += batch[0].shape[0]
-print(f'\ntotal = {c}')
-sys.exit(0)
+
+
 # ----------------------------------------- Initiate Model ----------------------------------------------------
 
 model = LMMVAEGAN(params["Z_DIM"], params["GAN"], params["VERSION"])
@@ -145,7 +149,7 @@ for epoch in range(pre_epochs, pre_epochs + params["EPOCHS"]):
     epoch_losses = []
     for batch_no, batch in enumerate(dataloader):
         progress = f'\tEpoch [{epoch + 1} / {pre_epochs + params["EPOCHS"]}]  -  '\
-                   + f'Batch [{batch_no + 1} / {len(dataloader)}]'
+                   + f'Batch [{batch_no + 1} / {n_batches}]'
         logger.info(progress)
         print(progress)
 

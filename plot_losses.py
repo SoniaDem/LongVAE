@@ -10,8 +10,8 @@ loss_lines = [l.strip('\n') for l in open(path, 'r')]
 
 losses = loss_txt_to_array(path)
 
-
-plot_losses(losses)
+start = 200
+plot_losses(losses, start)
 # plot_losses(losses[:, 200:])
 # plot_losses(losses, 5)
 

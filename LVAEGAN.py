@@ -82,6 +82,12 @@ else:
 
 logger.info(f"Loaded data: \n\tTotal data points {len(dataloader.dataset)},")
 
+c = 0
+for batch in dataloader:
+    print(f'batch_size = {batch[0].shape[0]}')
+    c += batch[0].shape[0]
+print(f'\ntotal = {c}')
+sys.exit(0)
 # ----------------------------------------- Initiate Model ----------------------------------------------------
 
 model = LMMVAEGAN(params["Z_DIM"], params["GAN"], params["VERSION"])

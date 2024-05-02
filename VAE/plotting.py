@@ -209,18 +209,21 @@ def plot_slice_prediction(x, y, axis=0, title=None):
 
 
 def plot_losses(losses,
+                start,
                 save=None):
     """
     Either receive the loss path or an array of losses.
     The array should be formatted as (epochs, 4)
     4 = total loss, recon loss, kl loss and align loss.
     :param losses:
+    :param start:
     :param save:
     :return:
     """
 
     losses = loss_txt_to_array(losses) if type(losses) == str else losses
-    epochs = list(range(losses.shape[1]))
+    epochs = list(start, range(losses.shape[1]))
+    losses = losses[:, start:]
 
     n = losses.shape[0]
     c = 3 if n == 5 else 2

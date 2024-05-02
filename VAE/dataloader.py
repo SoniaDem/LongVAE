@@ -205,7 +205,7 @@ class SubjectBatchSampler(Sampler):
         rand_subj = torch.randint(low=0, high=len(self.subj_dict.keys()), size=(len(self.subj_dict.keys()),))
 
         batch = []
-        for i in rand_subj:
+        for sub_no, i in enumerate(rand_subj):
             subj_id = list(self.subj_dict.keys())[i]
             sample_times = torch.randint(low=self.min_data, high=self.max_data, size=(1,)).item()
             # print('sample times', sample_times)
@@ -215,14 +215,22 @@ class SubjectBatchSampler(Sampler):
             rand_times = torch.randperm(len(self.subj_dict[subj_id]))[:sample_size]
 
             # rand_times = torch.randint(low=0, high=len(self.subj_dict[subj_id]), size=(sample_size,))
-            # rand_times = torch.randperm(sample_size)
-            for t in rand_times:
-                batch.append(self.subj_dict[subj_id][t.item()])
-                # print(self.subj_dict[subj_id][t.item()])
-                if len(batch) == self.batch_size:
-                    # print(batch)
-                    yield batch
-                    batch = []
+            # rand_times = torch.randperm(sam0ple_size)
+            if len(batch) + rand_times.shape[0] > self.batch_size:
+                yield batch
+                batch = []
+                for t in rand_times:
+                    batch.append(self.subj_dict[subj_id][t.item()])
+            else:
+                for t in rand_times:
+                    batch.append(self.subj_dict[subj_id][t.item()])
+                    # print(self.subj_dict[subj_id][t.item()])
+                    if len(batch) == self.batch_size:
+                        # print(batch)
+                        yield batch
+                        batch = []
+            if sub_no == len(self.subj_dict.keys())-1:
+                yield batch
 
         # batch = []
         # for i, (img, subj_id, time) in enumerate(self.data):

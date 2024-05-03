@@ -1,6 +1,6 @@
 from torch.nn import Conv2d, MaxPool2d, Linear, ConvTranspose2d, \
     BatchNorm2d, Flatten, Unflatten, Module, Sigmoid, Conv3d, \
-    BatchNorm3d, ConvTranspose3d
+    BatchNorm3d, ConvTranspose3d, Sequential, LeakyReLU
 import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.normal import Normal
@@ -144,63 +144,74 @@ class Encoder3d(Module):
     def __init__(self):
         super(Encoder3d, self).__init__()
 
-        self.conv1 = Conv3d(1, 8, kernel_size=3, stride=2, padding=1)
-        self.batch1 = BatchNorm3d(8)
-        self.conv2 = Conv3d(8, 16, kernel_size=3, stride=2, padding=1)
-        self.batch2 = BatchNorm3d(16)
-        self.conv3 = Conv3d(16, 32, kernel_size=3, stride=2, padding=1)
-        self.batch3 = BatchNorm3d(32)
-        self.conv4 = Conv3d(32, 32, kernel_size=3, stride=1, padding=0)
-        self.batch4 = BatchNorm3d(32)
+        self.ConvBlock1 = Sequential(Conv3d(1, 8, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU(),
+                                     Conv3d(8, 8, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU()
+                                     )
+
+        self.ConvBlock2 = Sequential(Conv3d(8, 16, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU(),
+                                     Conv3d(16, 16, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU()
+                                     )
+
+        self.ConvBlock3 = Sequential(Conv3d(16, 32, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU(),
+                                     Conv3d(32, 32, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU()
+                                     )
+
         self.flatten = Flatten()
 
     def forward(self, x):
-        x = self.batch1(self.conv1(x))
-        x = F.leaky_relu(x)
-        x = self.batch2(self.conv2(x))
-        x = F.leaky_relu(x)
-        x = self.batch3(self.conv3(x))
-        x = F.leaky_relu(x)
-        x = self.batch4(self.conv4(x))
-        # print(x.shape)
-        x = F.leaky_relu(x)
+        x = self.ConvBlock1(x)
+        print('ConvBlock1', x.shape)
+        x = self.ConvBlock2(x)
+        print('ConvBlock2', x.shape)
+        x = self.ConvBlock3(x)
+        print('ConvBlock3', x.shape)
         x = self.flatten(x)
+        print('flat', x.shape)
         return x
 
 
 class Decoder3d(Module):
-    def __init__(self, z_dims, flat_dim):
+    def __init__(self, z_dims):
         super(Decoder3d, self).__init__()
-        self.linear = Linear(z_dims, 32*4*7*7*3)
-        self.unflatten = UnflattenManual3d()
-        self.conv1 = ConvTranspose3d(32, 16, kernel_size=3, stride=1, padding=0)
-        self.batch1 = BatchNorm3d(16)
-        self.conv2 = ConvTranspose3d(16, 16, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.batch2 = BatchNorm3d(16)
-        self.conv3 = ConvTranspose3d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.batch3 = BatchNorm3d(8)
-        self.conv4 = ConvTranspose3d(8, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
-        self.sigmoid = Sigmoid()
+
+        self.unflatten = Sequential(Linear(z_dims, 32*7*6*6),
+                                    UnflattenManual3d(),
+                                    LeakyReLU())
+        self.ConvBlock3 = Sequential(ConvTranspose3d(32, 32, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU())
+        self.ConvBlock2 = Sequential(ConvTranspose3d(16, 16, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU())
+        self.ConvBlock1 = Sequential(ConvTranspose3d(8, 8, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(8, 1, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     Sigmoid())
 
     def forward(self, x):
-        print(f'\nThis is the Decoder Johnson')
-        x = self.linear(x)
-        print('')
-        print(x.shape)
         x = self.unflatten(x)
-        print(x.shape)
-        x = self.batch1(self.conv1(x))
-        print(x.shape)
-        x = F.leaky_relu(x)
-        x = self.batch2(self.conv2(x))
-        print(x.shape)
-        x = F.leaky_relu(x)
-        x = self.batch3(self.conv3(x))
-        print(x.shape)
-        x = F.leaky_relu(x)
-        x = self.conv4(x)
-        print(x.shape)
-        x = self.sigmoid(x)
+        x = self.ConvBlock3(x)
+        x = self.ConvBlock2(x)
+        x = self.ConvBlock1(x)
         return x
 
 
@@ -241,7 +252,7 @@ class Discriminator3d(Module):
 
 class UnflattenManual3d(Module):
     def forward(self, x):
-        return x.view(x.size(0), 32, 14, 14, 3)
+        return x.view(x.size(0), 32, 7, 6, 6)
 
 
 class VAE3d(Module):

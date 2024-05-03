@@ -144,8 +144,6 @@ class Decoder3d(Module):
     def __init__(self, z_dims):
         super(Decoder3d, self).__init__()
 
-        self.leakyrelu = LeakyReLU()
-
         self.unflatten = Sequential(Linear(z_dims, 32*7*6*6),
                                     UnflattenManual3d(),
                                     LeakyReLU())
@@ -169,14 +167,9 @@ class Decoder3d(Module):
 
     def forward(self, x):
         x = self.unflatten(x)
-        print('unflat', x.shape)
         x = self.ConvBlock3(x)
-        print('cb 3', x.shape)
         x = self.ConvBlock2(x)
-        print('cb 2', x.shape)
         x = self.ConvBlock1(x)
-        print('cb 1', x.shape)
-
         return x
 
 #

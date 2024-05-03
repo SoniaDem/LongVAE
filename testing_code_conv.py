@@ -2,154 +2,204 @@
 This code is just a tester for the VAE to load some of the data and make sure the VAE fits to the data.
 
 Joe/Sonia 06/03/2023
-"""
-# ----------------------------- Load Packages --------------------------------------- 0.
 
+------------------------
+
+Now this code is to test out a new encoder and decoder architecture and to make sure the shapes are correct.
+
+Joe 03/05/2024
+"""
+
+# ----------------------------------------- Load Packages ----------------------------------------------------
 import os
+import sys
+from glob import glob
 import pandas as pd
 import torch
-from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.nn import Conv3d, BatchNorm3d, Linear, Flatten, Unflatten, Sigmoid, ConvTranspose3d, \
+    Module, Sequential, LeakyReLU
+import albumentations as a
 
-from VAE.dataloader import BrainDataset3D
-from VAE.models import VAE3d
-from VAE.train import loss_fn, train_loop, eval_loop
 
+from get_params import get_params
+from VAE.dataloader import LongDataset, SubjectBatchSampler
+
+# ----------------------------------- Set up project and load parameters -----------------------------------------------
+
+# path = sys.argv[1]
+path = 'D:\\Projects\\SoniaVAE\\ParamFiles\\IGLS_test_params.txt'
+params = get_params(path)
+name = params["NAME"]
+loss_filename = os.path.join(params["PROJECT_DIR"], name + '_loss.txt')
+
+if not os.path.isdir(params["PROJECT_DIR"]):
+    os.mkdir(params["PROJECT_DIR"])
+    print(f'Made project {params["PROJECT_DIR"]}')
+    os.mkdir(params["MODEL_DIR"])
+    os.mkdir(params["LATENT_DIR"])
+    os.mkdir(params["LOG_DIR"])
+    loss_file = open(loss_filename, "w+")
+    loss_file.close()
+
+print("Loaded packages and parameter file.")
+
+# ----------------------------------------- Load data ----------------------------------------------------
+
+root_path = params["IMAGE_DIR"]
+paths = glob(os.path.join(root_path, '*'))
+subject_key = pd.read_csv(os.path.join(params["SUBJ_DIR"], params["SUBJ_PATH"]))
+
+# Get cuda device
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print(f"Device = {device}")
 
-print('0. Imported packages')
-print(f'\tDevice: {device}')
+transforms = a.Compose([
+    a.HorizontalFlip(p=params["H_FLIP"]),
+    a.VerticalFlip(p=params["V_FLIP"])
+])
 
-# ----------------------------- Retrieve the image paths ---------------------------- 1.
+loaded_data = LongDataset(image_list=paths,
+                          subject_key=subject_key,
+                          transformations=transforms,
+                          min_data=params["MIN_DATA"])
 
-out_path = 'D:\\ADNI_VAE\\CrossValidationFiles\\adni_5fold_all.csv'
-cv_split = pd.read_csv(out_path)
+if params["USE_SAMPLER"]:
+    custom_sampler = SubjectBatchSampler(subject_dict=loaded_data.subj_dict,
+                                         batch_size=params["BATCH_SIZE"],
+                                         min_data=int(params["SAMPLER_PARAMS"][0]),
+                                         max_data=int(params["SAMPLER_PARAMS"][1]))
 
-fold = 0
-train = cv_split[cv_split[f'fold_{fold}'] == 'train']['extracted_paths'].tolist()
-val = cv_split[cv_split[f'fold_{fold}'] == 'val']['extracted_paths'].tolist()
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_sampler=custom_sampler)
 
-print(f'1. Number of brains in train:  {len(train)}')
-print(f'   Number of brains in val:    {len(val)}')
-
-# ----------------------------- Load data into Data Loader ---------------------------- 2.
-
-# Define some transformations. It must at least convert the image to a tensor
-rescale_factor = 4
-filetype = 'pt'
-train_data = BrainDataset3D(train,
-                            filetype=filetype,
-                            scale=rescale_factor)
-
-val_data = BrainDataset3D(val,
-                          filetype=filetype,
-                          scale=rescale_factor)
-
-batch = 32
-trainLoader = DataLoader(train_data,
-                         batch_size=batch,
-                         shuffle=True)
-
-valLoader = DataLoader(val_data,
-                       batch_size=batch,
-                       shuffle=True)
-
-print(f'2. Data loaders have been created. Train: {len(trainLoader.dataset)} Validation: {len(valLoader)}')
-
-# Note that you pass the data into the BrainDataset3d class, it changes the order of the axes.
-# (batch, 0, 1, 2) to (batch, 2, 0, 1). Is this a problem
-
-# ------------------------------------ File to store loss values -------------------------------------- 3.
-
-cwd = os.getcwd()
-loss_filename = 'loss_file_normal.txt'
-loss_filename = os.path.join(cwd, loss_filename)
-
-if os.path.isfile(loss_filename):
-    print(f'\tThis file exists. Any training will append to this file\n\t\t{loss_filename}')
+    n_batches = 0
+    data_size = 0
+    # for batch in dataloader:
+    #     n_batches += 1
+    #     data_size += batch[0].shape[0]
 
 else:
-    print(f'\tCreating file {loss_filename}')
-    # 'w+' means write and add. If this file does not exist then this will create it.
-    loss_file = open(loss_filename, 'w+')
-    loss_file.close()
+    dataloader = DataLoader(dataset=loaded_data,
+                            num_workers=0,
+                            batch_size=params["BATCH_SIZE"],
+                            shuffle=params["SHUFFLE_BATCHES"])
+    n_batches = len(dataloader)
+    data_size = len(dataloader.dataset)
 
-print('3. Create or loaded log file for loss data.')
-# ----------------------------- Initialise Some Training Parameters ---------------------------- 4.
-
-# Intialize model
-model = VAE3d()
-model = model.to(device)
-
-model_path = 'D:\\ADNI_VAE\\Models\\DevModels\\'
-model_name = f'VAE_full_data'
-model_name = os.path.join(model_path, model_name)
-
-model_list = [m for m in os.listdir(model_path) if model_name in m]
-if len(model_list)>0:
-    model_epochs = [int(m.split('_')[-1][:-3]) for m in model_list]
-    pre_epochs = max(model_epochs)
-    load_model = os.path.join('D:\\ADNI_VAE\\Models\\DevModels\\', model_list[model_epochs.index(pre_epochs)])
-    model.load_state_dict(torch.load(load_model))
-    print(f'\tLoaded model {load_model}')
-
-else:
-    print('\tInitialised new model')
-    pre_epochs = 0
-
-lr = 1e-5
-optimizer = Adam(model.parameters(), lr=lr)
-k_div = True
-beta = 0.5
-epochs = 5000
-save_epochs = 1000
-print('4. Training parameters initialised')
+print(f"Loaded data: \n\tTotal data points {data_size},")
 
 
-# ------------------------------------ Start training -------------------------------------- 5.
+# ----------------------------------------- Improvised Code ----------------------------------------------------
 
-train_losses = []
-val_losses = []
-for epoch in range(1, epochs+1):
+img, subj_ids, times = next(iter(dataloader))
+img = img.to(device)
 
-    train_loss = train_loop(model,
-                            trainLoader,
-                            optimizer,
-                            k_div=k_div,
-                            beta=beta,
-                            print_batches=False,
-                            device=device)
+# ---------------------- model stuff -------------------------
 
-    val_loss = eval_loop(model,
-                         valLoader,
-                         k_div=k_div,
-                         beta=beta,
-                         device=device)
+class Encoder3d(Module):
+    def __init__(self):
+        super(Encoder3d, self).__init__()
 
-    train_losses.append(train_loss)
-    val_losses.append(val_loss)
+        self.ConvBlock1 = Sequential(Conv3d(1, 8, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU(),
+                                     Conv3d(8, 8, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU()
+                                     )
 
-    print(f'[{epoch} / {epochs}]\ttrain: {train_loss :.10f}\tval: {val_loss :.10f}')
+        self.ConvBlock2 = Sequential(Conv3d(8, 16, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU(),
+                                     Conv3d(16, 16, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU()
+                                     )
 
-    if train_loss != train_loss or val_loss != val_loss:
-        raise Exception('Loss is nan.')
+        self.ConvBlock3 = Sequential(Conv3d(16, 32, kernel_size=3, stride=2, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU(),
+                                     Conv3d(32, 32, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU()
+                                     )
 
-    if epoch % save_epochs == 0:
-        save_name = model_name + f'_{pre_epochs + epoch}.h5'
-        torch.save(model.state_dict(), save_name)
+        self.flatten = Flatten()
 
-    # 'a' means append
-    loss_file = open(loss_filename, 'a')
-    loss_file.write(f'\ntrain: {train_loss}')
-    loss_file.write(f'\nval: {val_loss}')
-    loss_file.close()
+    def forward(self, x):
+        x = self.ConvBlock1(x)
+        print('ConvBlock1', x.shape)
+        x = self.ConvBlock2(x)
+        print('ConvBlock2', x.shape)
+        x = self.ConvBlock3(x)
+        print('ConvBlock3', x.shape)
+        x = self.flatten(x)
+        print('flat', x.shape)
+        return x
 
 
-import nibabel as nib
-import nibabel.processing as proc
-import numpy as np
+class Decoder3d(Module):
+    def __init__(self, z_dims):
+        super(Decoder3d, self).__init__()
 
-image = nib.load(train[0])
-image = proc.resample_to_output(image, 4)
-image = torch.Tensor(image.get_fdata(dtype='float64'))
+        self.leakyrelu = LeakyReLU()
 
+        self.unflatten = Sequential(Linear(z_dims, 32*7*6*6),
+                                    UnflattenManual3d(),
+                                    LeakyReLU())
+        self.ConvBlock3 = Sequential(ConvTranspose3d(32, 32, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(32),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU())
+        self.ConvBlock2 = Sequential(ConvTranspose3d(16, 16, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(16),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(16, 8, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU())
+        self.ConvBlock1 = Sequential(ConvTranspose3d(8, 8, kernel_size=3, stride=1, padding=1),
+                                     BatchNorm3d(8),
+                                     LeakyReLU(),
+                                     ConvTranspose3d(8, 1, kernel_size=3, stride=2, padding=1, output_padding=1),
+                                     Sigmoid())
+
+    def forward(self, x):
+        x = self.unflatten(x)
+        print('unflat', x.shape)
+        x = self.ConvBlock3(x)
+        print('cb 3', x.shape)
+        x = self.ConvBlock2(x)
+        print('cb 2', x.shape)
+        x = self.ConvBlock1(x)
+        print('cb 1', x.shape)
+
+        return x
+
+#
+
+class UnflattenManual3d(Module):
+    def forward(self, x):
+        return x.view(x.size(0), 32, 7, 6, 6)
+
+
+lin = Linear(8064, 64)
+lin = lin.to(device)
+
+enc = Encoder3d()
+
+print('img', img.shape)
+enc = enc.to(device)
+out = enc(img)
+
+out2 = lin(out)
+print('lin', out2.shape)
+
+dec = Decoder3d(64)
+dec = dec.to(device)
+out3 = dec(out2)
+
+print('out', out3.shape)

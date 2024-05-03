@@ -172,13 +172,13 @@ class Encoder3d(Module):
 
     def forward(self, x):
         x = self.ConvBlock1(x)
-        print('ConvBlock1', x.shape)
+        # print('ConvBlock1', x.shape)
         x = self.ConvBlock2(x)
-        print('ConvBlock2', x.shape)
+        # print('ConvBlock2', x.shape)
         x = self.ConvBlock3(x)
-        print('ConvBlock3', x.shape)
+        # print('ConvBlock3', x.shape)
         x = self.flatten(x)
-        print('flat', x.shape)
+        # print('flat', x.shape)
         return x
 
 
@@ -1423,8 +1423,8 @@ class LMMVAEGAN(Module):
         self.batch_size = None
         self.device = None
         self.encoder = Encoder3d()
-        self.linear_z_ijk = Linear(2560, z_dim)
-        self.decoder = Decoder3d_igls(z_dims=z_dim, flat_dim=2560)
+        self.linear_z_ijk = Linear(8064, z_dim)
+        self.decoder = Decoder3d(z_dims=z_dim)
         self.igls_iterations = 1
         self.k_dims = z_dim
         self.reset_sig_est = True

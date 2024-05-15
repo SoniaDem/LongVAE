@@ -1432,13 +1432,13 @@ class LMMVAEGAN(Module):
         self.version = version
         if gan:
             self.discriminator = Discriminator3d()
-        if version == 1:
-            self.save_latent = None
-            self.slope = True
-            self.a01 = True
+        self.save_latent = None
+        self.slope = True
+        self.a01 = True
         if version == 2:
             self.linear_var = Linear(z_dim, z_dim)
             self.linear_mu = Linear(z_dim, z_dim)
+            self.sigmoid = Sigmoid()
 
     def forward(self, x, subject_ids, times):
         self.device = x.device
@@ -1489,7 +1489,16 @@ class LMMVAEGAN(Module):
             lin_z_hat = self.reparameterise(lin_mu, lin_logvar)
             x = self.decoder(lin_z_hat)
             if self.mixed_model:
-                cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk, None, subject_ids, times)
+                if self.a01:
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator(z_ijk,
+                                                                                   None,
+                                                                                   subject_ids,
+                                                                                   times)
+                else:
+                    cov_mat, betahat, sig_randeffs, sig_errs = self.igls_estimator_noa01(z_ijk,
+                                                                                         None,
+                                                                                         subject_ids,
+                                                                                         times)
                 mm_mu = (betahat[:, 0] + (betahat[:, 1] * times)).T
 
                 a0, a1, e = self.igls_reparameterise_v2(sig_randeffs, sig_errs, subject_ids)
@@ -1632,7 +1641,7 @@ class LMMVAEGAN(Module):
 
         sigma_update = zeros(self.k_dims, self.batch_size, self.batch_size)
         for i in range(self.igls_iterations):
-            if i+1 < self.igls_iterations:
+            if z_detached is not None and i+1 < self.igls_iterations:
                 z = z_detached
             else:
                 z = z_ijk
@@ -1658,6 +1667,13 @@ class LMMVAEGAN(Module):
                 sigma_update = (s_e * z1) + (s_a0 * z2)
 
             sigma_update = sigma_update.double()
+
+            for arb in range(sigma_update.shape[0]):
+                sig_diag = []
+                for arb2 in range(sigma_update.shape[1]):
+                    sig_diag.append(sigma_update[arb, arb2, arb2].item())
+                print(sig_diag)
+
             inv_sig_up = inverse(sigma_update).float()
             sigma_update = sigma_update.float()
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))

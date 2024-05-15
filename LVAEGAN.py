@@ -137,9 +137,8 @@ model.mixed_model = params["MIXED_MODEL"]
 model.igls_iterations = params["IGLS_ITERATIONS"]
 model.save_latent = os.path.join(params["LATENT_DIR"], 'z_ijk.pt') if params["SAVE_LATENT"] else None
 
-if params["VERSION"] == 1:
-    model.slope = params["SLOPE"]
-    model.a01 = params["INCLUDE_A01"]
+model.slope = params["SLOPE"]
+model.a01 = params["INCLUDE_A01"]
 
 logger.info('Parameters and optimizers initialised.')
 # ----------------------------------------------- Train Loop --------------------------------------------------------

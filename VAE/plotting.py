@@ -222,7 +222,7 @@ def plot_losses(losses,
     """
 
     losses = loss_txt_to_array(losses) if type(losses) == str else losses
-    epochs = list(start, range(losses.shape[1]))
+    epochs = list(range(start, losses.shape[1]))
     losses = losses[:, start:]
 
     n = losses.shape[0]

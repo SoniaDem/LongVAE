@@ -232,12 +232,6 @@ class SubjectBatchSampler(Sampler):
             if sub_no == len(self.subj_dict.keys())-1:
                 yield batch
 
-        # batch = []
-        # for i, (img, subj_id, time) in enumerate(self.data):
-        #     batch.append(i)
-        #     if len(batch) == self.batch_size
-        #         yield batch
-        #         batch = []
     def __len__(self):
         return len(self.subj_dict.keys())
 

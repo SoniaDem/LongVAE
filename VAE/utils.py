@@ -1,4 +1,7 @@
 import torch
+import numpy as np
+
+
 def ask_dims(image):
     """
     Given an image, this functions asks you to specify the dimensions you would like to plot.
@@ -80,3 +83,13 @@ def batch_diag(tensor):
     for i in range(tensor.shape[0]):
         diag_mat[i] = torch.diag(tensor[i])
     return diag_mat
+
+
+def moving_average(arr, w):
+    ma_arr = []
+    for i in range(arr.shape[0]):
+        avs = []
+        for j in range(arr.shape[1] - w):
+            avs.append(arr[i, j:j + w].mean())
+        ma_arr.append(avs)
+    return np.asarray(ma_arr)

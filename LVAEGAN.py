@@ -15,7 +15,6 @@ from torch.optim import Adam, SGD
 from torch.utils.data import DataLoader
 import albumentations as a
 
-
 from get_params import get_params
 from VAE.models import LMMVAEGAN
 from VAE.dataloader import LongDataset, SubjectBatchSampler
@@ -24,7 +23,8 @@ from VAE.utils import list_to_str
 
 # ----------------------------------- Set up project and load parameters -----------------------------------------------
 
-path = sys.argv[1]
+# path = sys.argv[1]
+path = '..\\ParamFiles\\IGLS_32_new.txt'
 params = get_params(path)
 name = params["NAME"]
 loss_filename = os.path.join(params["PROJECT_DIR"], name + '_loss.txt')
@@ -89,8 +89,6 @@ else:
     data_size = len(dataloader.dataset)
 
 logger.info(f"Loaded data: \n\tTotal data points {data_size},")
-
-
 
 # ----------------------------------------- Initiate Model ----------------------------------------------------
 

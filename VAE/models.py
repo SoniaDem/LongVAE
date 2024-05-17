@@ -2,6 +2,7 @@ from torch.nn import Conv2d, MaxPool2d, Linear, ConvTranspose2d, \
     BatchNorm2d, Flatten, Unflatten, Module, Sigmoid, Conv3d, \
     BatchNorm3d, ConvTranspose3d, Sequential, LeakyReLU
 import torch.nn.functional as F
+from torch.linalg import pinv
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.normal import Normal
 from torch import sigmoid, exp, randn_like, tensor, repeat_interleave, \
@@ -1449,8 +1450,8 @@ class LMMVAEGAN(Module):
 
         z_detached = z_ijk.detach()
 
-        if self.save_latent is not None:
-            torch.save(z_ijk, self.save_latent)
+        # if self.save_latent is not None:
+        #     torch.save(z_ijk, self.save_latent)
 
         if self.version == 1:
             if self.mixed_model:
@@ -1587,7 +1588,7 @@ class LMMVAEGAN(Module):
             sigma_update = (s_e * z1) + (s_a0 * z2) + (s_a01 * z3) + (s_a1 * z4)
             sigma_update = sigma_update.double()
 
-            inv_sig_up = inverse(sigma_update).float()
+            inv_sig_up = pinv(sigma_update).float()
             sigma_update = sigma_update.float()
 
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
@@ -1668,13 +1669,18 @@ class LMMVAEGAN(Module):
 
             sigma_update = sigma_update.double()
 
-            for arb in range(sigma_update.shape[0]):
-                sig_diag = []
-                for arb2 in range(sigma_update.shape[1]):
-                    sig_diag.append(sigma_update[arb, arb2, arb2].item())
-                print(sig_diag)
+            if self.save_latent is not None:
+                torch.save(sigma_update, self.save_latent)
 
-            inv_sig_up = inverse(sigma_update).float()
+            # for arb in range(sigma_update.shape[0]):
+            #     sig_diag = []
+            #     for arb2 in range(sigma_update.shape[1]):
+            #         sig_diag.append(sigma_update[arb, arb2, arb2].item())
+            #
+            #     print('Batch Element', arb)
+            #     print(sig_diag)
+
+            inv_sig_up = pinv(sigma_update).float()
             sigma_update = sigma_update.float()
             b1 = inverse(bmm(bmm(xx.transpose(2, 1), inv_sig_up), xx))
             b2 = bmm(bmm(xx.transpose(2, 1), inv_sig_up), z.expand(1, -1, -1).transpose(2, 0))

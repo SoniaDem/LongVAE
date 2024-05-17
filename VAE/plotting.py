@@ -2,6 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 from VAE.train import loss_txt_to_array
+from VAE.utils import moving_average
 
 
 def plotting_predictions(model,
@@ -210,6 +211,7 @@ def plot_slice_prediction(x, y, axis=0, title=None):
 
 def plot_losses(losses,
                 start,
+                window=None,
                 save=None):
     """
     Either receive the loss path or an array of losses.
@@ -217,13 +219,19 @@ def plot_losses(losses,
     4 = total loss, recon loss, kl loss and align loss.
     :param losses:
     :param start:
+    :param window: Is specified then will plot the moving average with a window of this size.
     :param save:
     :return:
     """
 
     losses = loss_txt_to_array(losses) if type(losses) == str else losses
-    epochs = list(range(start, losses.shape[1]))
     losses = losses[:, start:]
+
+    if window is not None:
+        losses = moving_average(losses, window)
+        epochs = list(range(start + window, losses.shape[1]))
+    else:
+        epochs = list(range(start, losses.shape[1]))
 
     n = losses.shape[0]
     c = 3 if n == 5 else 2

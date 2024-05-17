@@ -1,4 +1,4 @@
-name: VAE
+name: VAE_3
 channels:
   - pytorch
   - conda-forge
